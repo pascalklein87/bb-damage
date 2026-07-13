@@ -1,0 +1,9 @@
+<div style="font-size: 0.85rem; color: #888; margin-bottom: 0.3rem;">
+    {% for crumb in breadcrumbs %}
+        {% if not loop.last %}
+            <a href="{{ crumb.url }}" style="color: #888; text-decoration: none;">{{ crumb.label }}</a> &rsaquo;
+        {% else %}
+            <span style="color: #ccc;">{{ crumb.label }}</span>
+        {% endif %}
+    {% endfor %}
+</div>

@@ -1,0 +1,534 @@
+{% extends "base.html" %}
+
+{% block title %}⚔ Battle Brothers Damage Calculator{% endblock %}
+
+{% block meta %}
+{# Only the bare /damage-calculator is an indexable page. Every per-weapon /
+   per-enemy query-string variant (?weapon=...&enemy=...) is noindexed so it is
+   not treated as a separate thin page; base.html already canonicalises them to
+   the bare path. Retired 2026-07-12 alongside the best-weapon-against pages. #}
+{% if request.query_string %}<meta name="robots" content="noindex,follow">{% endif %}
+<meta name="description" content="Calculate hits to kill for every weapon, skill, and enemy in Battle Brothers. Pick from presets and simulate across armor loadouts.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Battle Brothers Damage Calculator",
+  "url": "https://bloodngold.com/damage-calculator",
+  "description": "Calculate hits to kill for every weapon, skill, and enemy in Battle Brothers. Monte Carlo simulation with 20,000+ runs per scenario.",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Any",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "HeyPashi",
+    "url": "https://bloodngold.com"
+  }
+}
+</script>
+{% endblock %}
+
+{% block page_title %}
+{% set breadcrumbs = [{'url': '/', 'label': 'Home'}, {'label': 'Damage Calculator'}] %}
+{% include 'breadcrumb.html' with context %}
+<!-- h1 is clickable so user can reset the calculator to default state -->
+<h1><a href="/damage-calculator" style="color: inherit; text-decoration: underline;">Battle Brothers Damage Calculator</a></h1>
+{% endblock %}
+
+{% block content %}
+
+<div class="calculator three-col">
+    <div class="panel">
+        <h2>Attacker Traits and Perks</h2>
+        <label class="checkbox"><input type="checkbox" id="trait-double-grip" {% if selected and 'trait-double-grip' in selected.mod_checkboxes %}checked{% endif %}> Double Grip <span class="hint">damage x125% for 1H</span></label>
+        <label class="checkbox"><input type="checkbox" id="trait-drunkard" {% if selected and 'trait-drunkard' in selected.mod_checkboxes %}checked{% endif %}> Drunkard <span class="hint">damage x110%</span></label>
+        <label class="checkbox"><input type="checkbox" id="trait-huge" {% if selected and 'trait-huge' in selected.mod_checkboxes %}checked{% endif %}> Huge <span class="hint">damage x110%</span></label>
+        <label class="checkbox"><input type="checkbox" id="trait-tiny" {% if selected and 'trait-tiny' in selected.mod_checkboxes %}checked{% endif %}> Tiny <span class="hint">damage x85%</span></label>
+        <label class="checkbox"><input type="checkbox" id="trait-brute" {% if selected and 'trait-brute' in selected.mod_checkboxes %}checked{% endif %}> Brute <span class="hint">headshot dmg +15%</span></label>
+
+        <div class="checkbox-spacer"></div>
+
+        <label class="checkbox"><input type="checkbox" id="perk-duelist" {% if selected and 'perk-duelist' in selected.mod_checkboxes %}checked{% endif %}> Duelist <span class="hint">piercing +25% for 1H</span></label>
+        <label class="checkbox"><input type="checkbox" id="perk-killing-frenzy" {% if selected and 'perk-killing-frenzy' in selected.mod_checkboxes %}checked{% endif %}> Killing Frenzy <span class="hint">damage x125%</span></label>
+        <label class="checkbox"><input type="checkbox" id="perk-head-hunter" {% if selected and 'perk-head-hunter' in selected.mod_checkboxes %}checked{% endif %}> Head Hunter <span class="hint">chain headshots</span></label>
+        <label class="checkbox"><input type="checkbox" id="perk-crippling-strikes" {% if selected and 'perk-crippling-strikes' in selected.mod_checkboxes %}checked{% endif %}> Crippling Strikes <span class="hint">injury threshold x66%</span></label>
+        <label class="checkbox"><input type="checkbox" id="perk-executioner" {% if selected and 'perk-executioner' in selected.mod_checkboxes %}checked{% endif %}> Executioner <span class="hint">damage x120% vs injured</span></label>
+
+        <div class="advanced-toggle" id="extra-toggle">+ Background, Injuries, Status Effects, Attacker Buffs</div>
+        <div id="extra-summary" class="extra-summary">{% set _items = [] %}{% if selected and 'trait-juggler' in selected.mod_checkboxes %}{% set _ = _items.append('Juggler') %}{% endif %}{% if selected and 'trait-killer-on-the-run' in selected.mod_checkboxes %}{% set _ = _items.append('Killer on the Run') %}{% endif %}{% for mod in ['injury-broken-arm', 'injury-split-shoulder', 'injury-cut-arm-sinew', 'injury-injured-shoulder', 'status-dazed', 'status-distracted', 'status-strange-mushrooms'] %}{% if selected and mod in selected.mod_checkboxes %}{% set _ = _items.append(mod | replace('injury-', '') | replace('status-', '') | replace('-', ' ') | title) %}{% endif %}{% endfor %}{% if selected and selected.buff_slug %}{% for b in attacker_buffs %}{% if b.slug == selected.buff_slug %}{% set _ = _items.append(b.name) %}{% endif %}{% endfor %}{% endif %}{% if selected and selected.champion %}{% set _ = _items.append('Champion') %}{% endif %}{{ _items | join(', ') if _items else '- none -' }}</div>
+
+        <div class="modal-overlay" id="extra-modal" style="display:none">
+            <div class="modal-content">
+                <h2>Background, Injuries, Status Effects, Attacker Buffs</h2>
+
+                <h3>Background</h3>
+                <select id="background-select" style="display:none">
+                    <option value="">None</option>
+                    <option value="juggler" {% if selected and 'trait-juggler' in selected.mod_checkboxes %}selected{% endif %}>Juggler</option>
+                    <option value="killer-on-the-run" {% if selected and 'trait-killer-on-the-run' in selected.mod_checkboxes %}selected{% endif %}>Killer on the Run</option>
+                </select>
+                <input type="checkbox" id="trait-juggler" style="display:none" {% if selected and 'trait-juggler' in selected.mod_checkboxes %}checked{% endif %}>
+                <input type="checkbox" id="trait-killer-on-the-run" style="display:none" {% if selected and 'trait-killer-on-the-run' in selected.mod_checkboxes %}checked{% endif %}>
+                <div class="buff-dropdown" id="bg-dropdown">
+                    <div class="buff-dropdown-selected" id="bg-dropdown-selected">None</div>
+                    <div class="buff-dropdown-panel" id="bg-dropdown-panel" style="display:none">
+                        <div class="buff-option bg-option" data-value="">
+                            <span>None</span>
+                        </div>
+                        <div class="buff-option bg-option" data-value="juggler">
+                            <span>Juggler</span>
+                            <span class="hint">headshot chance +5%</span>
+                        </div>
+                        <div class="buff-option bg-option" data-value="killer-on-the-run">
+                            <span>Killer on the Run</span>
+                            <span class="hint">headshot chance +10%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <h3>Injuries</h3>
+                <label class="checkbox"><input type="checkbox" id="injury-broken-arm" {% if selected and 'injury-broken-arm' in selected.mod_checkboxes %}checked{% endif %}> Broken Arm <span class="hint">damage x50%</span></label>
+                <label class="checkbox"><input type="checkbox" id="injury-split-shoulder" {% if selected and 'injury-split-shoulder' in selected.mod_checkboxes %}checked{% endif %}> Split Shoulder <span class="hint">damage x50%</span></label>
+                <label class="checkbox"><input type="checkbox" id="injury-cut-arm-sinew" {% if selected and 'injury-cut-arm-sinew' in selected.mod_checkboxes %}checked{% endif %}> Cut Arm Sinew <span class="hint">damage x60%</span></label>
+                <label class="checkbox"><input type="checkbox" id="injury-injured-shoulder" {% if selected and 'injury-injured-shoulder' in selected.mod_checkboxes %}checked{% endif %}> Injured Shoulder <span class="hint">damage x75%</span></label>
+
+                <h3>Status Effects</h3>
+                <label class="checkbox"><input type="checkbox" id="status-dazed" {% if selected and 'status-dazed' in selected.mod_checkboxes %}checked{% endif %}> Dazed <span class="hint">damage x75%</span></label>
+                <label class="checkbox"><input type="checkbox" id="status-distracted" {% if selected and 'status-distracted' in selected.mod_checkboxes %}checked{% endif %}> Distracted <span class="hint">damage x65%</span></label>
+                <label class="checkbox"><input type="checkbox" id="status-strange-mushrooms" {% if selected and 'status-strange-mushrooms' in selected.mod_checkboxes %}checked{% endif %}> Strange Mushrooms <span class="hint">damage x125%</span></label>
+
+                <h3>Attacker Buff</h3>
+                <select id="attacker-buff" style="display:none">
+                    <option value="" data-slug="">None</option>
+                    {% for buff in attacker_buffs %}
+                    <option value="{{ buff.id }}"
+                        data-slug="{{ buff.slug }}"
+                        data-stat="{{ buff.stat }}"
+                        data-value="{{ buff.value }}">{{ buff.name }}</option>
+                    {% endfor %}
+                </select>
+                <div class="buff-dropdown" id="buff-dropdown">
+                    <div class="buff-dropdown-selected" id="buff-dropdown-selected">None</div>
+                    <div class="buff-dropdown-panel" id="buff-dropdown-panel" style="display:none">
+                        <div class="buff-option" data-value="" data-slug="" data-stat="" data-buff-value="">
+                            <span>None</span>
+                        </div>
+                        {% for buff in attacker_buffs %}
+                        <div class="buff-option" data-value="{{ buff.id }}" data-slug="{{ buff.slug }}" data-stat="{{ buff.stat }}" data-buff-value="{{ buff.value }}">
+                            <span>{{ buff.name }}</span>
+                            <span class="hint">
+                                {%- if buff.stat == 'DamageTotalPerc' %}damage x{{ buff.value }}%
+                                {%- elif buff.stat == 'DamageDirectPerc' %}piercing x{{ buff.value }}%
+                                {%- elif buff.stat == 'DamageArmorPerc' %}armor dmg x{{ buff.value }}%
+                                {%- endif %}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <h3>Champion Buff</h3>
+                <label class="checkbox"><input type="checkbox" id="buff-champion" {% if selected and selected.champion %}checked{% endif %}> Champion <span class="hint">damage x115%</span></label>
+
+                <button class="modal-close" id="extra-modal-close">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Weapon</h2>
+        <select id="weapon-select" style="display:none">
+                {% for w in weapons %}
+                <option value="{{ w.id }}"
+                    data-slug="{{ w.slug }}"
+                    data-min="{{ w.damage_min }}"
+                    data-max="{{ w.damage_max }}"
+                    data-ap="{{ w.piercing_perc }}"
+                    data-dap="{{ w.damage_armor_perc }}"
+                    data-hs="{{ w.headshot_chance }}"
+                    data-skills='{{ w.skills | tojson }}'
+                    data-tag="{{ w.tag | default('') }}"
+                    data-two-handed="{{ 'true' if w.two_handed else 'false' }}"
+                    {% if selected and selected.weapon_id %}
+                        {% if w.id == selected.weapon_id %}selected{% endif %}
+                    {% elif w.name == 'Greatsword' %}selected{% endif %}>
+                    {{ w.name }}
+                </option>
+                {% endfor %}
+            </select>
+        <div class="weapon-dropdown" id="weapon-dropdown">
+            <div class="weapon-dropdown-selected" id="weapon-dropdown-selected">{% if sel_weapon %}{{ sel_weapon.name }}{% endif %}</div>
+            <div class="weapon-dropdown-panel" id="weapon-dropdown-panel" style="display:none">
+                <input type="search" class="weapon-search" id="weapon-search" placeholder="Search weapons...">
+                <div class="weapon-options" id="weapon-options"></div>
+            </div>
+        </div>
+
+        <div class="stat-card" id="weapon-stat-card">
+            <div class="stat-row">
+                <span class="stat-label">Damage</span>
+                <span class="stat-value" id="ws-damage">{% if sel_weapon %}{{ sel_weapon.damage_min }} – {{ sel_weapon.damage_max }}{% endif %}</span>
+                <span class="stat-edit" style="display:none"><input type="number" id="damage_min" value="{{ sel_weapon.damage_min if sel_weapon else 40 }}" class="stat-input stat-input-small"> – <input type="number" id="damage_max" value="{{ sel_weapon.damage_max if sel_weapon else 60 }}" class="stat-input stat-input-small"></span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Piercing</span>
+                <span class="stat-value" id="ws-ap">{% if sel_weapon %}{{ (sel_weapon.piercing_perc * 100) | round(0) | int }}%{% endif %}</span>
+                <span class="stat-edit" style="display:none"><input type="number" id="piercing_perc" value="{{ (sel_weapon.piercing_perc * 100) | round(0) | int if sel_weapon else 0 }}" step="1" class="stat-input"></span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Armor Damage</span>
+                <span class="stat-value" id="ws-dap">{% if sel_weapon %}{{ (sel_weapon.damage_armor_perc * 100) | round(0) | int }}%{% endif %}</span>
+                <span class="stat-edit" style="display:none"><input type="number" id="damage_armor_perc" value="{{ (sel_weapon.damage_armor_perc * 100) | round(0) | int if sel_weapon else 100 }}" step="1" class="stat-input"></span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Headshot Chance Bonus</span>
+                <span class="stat-value" id="ws-hs">{% if sel_weapon %}+{{ sel_weapon.get('headshot_chance', 0) }}%{% endif %}</span>
+                <span class="stat-edit" style="display:none"><input type="number" id="headshot_chance" value="{{ sel_weapon.get('headshot_chance', 0) if sel_weapon else 0 }}" step="1" class="stat-input"></span>
+            </div>
+        </div>
+
+        <div class="edit-toggle-row" id="edit-toggle-row">
+            <span class="famed-toggle" id="edit-reset" style="display:none">&#8634; Reset</span>
+            <span class="famed-toggle" id="edit-toggle">&#9998; Edit Weapon Stats</span>
+        </div>
+
+        <h2 style="margin-top: 1.2rem; margin-bottom: 0.3rem">Skill</h2>
+        <div id="skill-radios" class="skill-radios"></div>
+    </div>
+
+    <div class="col-enemy-wrapper">
+    <div class="panel">
+        <h2>Enemy</h2>
+        <select id="enemy-select" style="display:none">
+                <option value="custom"
+                    data-slug="custom-brother"
+                    data-hp="80"
+                    data-body="110"
+                    data-head="105"
+                    data-body-min="110"
+                    data-body-max="110"
+                    data-head-min="105"
+                    data-head-max="105"
+                    data-perks='[]'
+                    data-racial-trait=""
+                    data-racial-resistances='[]'
+                    data-racial-immunities='[]'
+                    data-armor-dmg-perc="1.0"
+                    data-heal-per-turn="0">Custom Brother</option>
+                {% for e in enemies %}
+                <option value="{{ e.id }}"
+                    data-slug="{{ e.slug }}"
+                    data-hp="{{ e.hitpoints }}"
+                    data-body="{{ e.body_armor }}"
+                    data-head="{{ e.head_armor }}"
+                    data-body-min="{{ e.body_armor_min }}"
+                    data-body-max="{{ e.body_armor_max }}"
+                    data-head-min="{{ e.head_armor_min }}"
+                    data-head-max="{{ e.head_armor_max }}"
+                    data-perks='{{ e.perks | tojson }}'
+                    data-racial-trait="{{ e.racial_trait | default('') }}"
+                    data-racial-resistances='{{ e.racial_resistances | default([]) | tojson }}'
+                    data-racial-immunities='{{ e.racial_immunities | default([]) | tojson }}'
+                    data-armor-dmg-perc="{{ e.armor_damage_received_perc | default(1.0) }}"
+                    data-heal-per-turn="{{ e.heal_per_turn | default(0) }}"
+                    {% if selected and selected.enemy_id %}
+                        {% if e.id == selected.enemy_id %}selected{% endif %}
+                    {% elif e.name == 'Barbarian Chosen' %}selected{% endif %}>
+                    {{ e.name }}
+                </option>
+                {% endfor %}
+            </select>
+        <div class="weapon-dropdown" id="enemy-dropdown">
+            <div class="weapon-dropdown-selected" id="enemy-dropdown-selected">{% if sel_enemy %}{{ sel_enemy.name }}{% endif %}</div>
+            <div class="weapon-dropdown-panel" id="enemy-dropdown-panel" style="display:none">
+                <input type="search" class="weapon-search" id="enemy-search" placeholder="Search enemies...">
+                <div class="weapon-options" id="enemy-options"></div>
+            </div>
+        </div>
+        <div id="enemy-stats" class="stat-card">
+            <div class="stat-row"><span class="stat-label">Hitpoints</span><span class="stat-value" id="es-hp"></span></div>
+            <div class="stat-row"><span class="stat-label">Body Armor</span><span class="stat-value" id="es-body"></span></div>
+            <div class="stat-row"><span class="stat-label">Head Armor</span><span class="stat-value" id="es-head"></span></div>
+            <div class="stat-row stat-row-perks"><span class="stat-label">Defense Perks</span><span class="stat-value stat-value-perks" id="es-perks">none</span></div>
+            <div class="stat-row stat-row-perks"><span class="stat-label">Racial Trait</span><span class="stat-value stat-value-perks" id="es-racial">none</span></div>
+        </div>
+        <div id="custom-brother-panel" style="display:none">
+            <div class="stat-card">
+                <div class="stat-row">
+                    <span class="stat-label">Hitpoints</span>
+                    <span class="stat-edit" style="display:inline"><input type="number" id="cb-hp" value="80" min="1" max="200" class="stat-input"></span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Body Armor</span>
+                    <span class="stat-edit" style="display:inline"><input type="number" id="cb-body" value="110" min="0" max="600" class="stat-input"></span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Head Armor</span>
+                    <span class="stat-edit" style="display:inline"><input type="number" id="cb-head" value="105" min="0" max="600" class="stat-input"></span>
+                </div>
+            </div>
+            <div style="margin-top: 0.5rem">
+                <label class="checkbox"><input type="checkbox" id="cb-nimble"> Nimble <input type="number" id="cb-armor-fatigue" value="17" min="15" max="43" step="1" class="stat-input stat-input-small" style="width:3.5em; margin-left:0.3em"> fat <span class="hint" id="cb-nimble-pct">HP dmg x42.3%</span></label>
+                <label class="checkbox"><input type="checkbox" id="cb-battle-forged"> Battle Forged <span class="hint" id="cb-bf-pct">armor dmg x70.0%</span></label>
+                <div class="advanced-toggle" id="cb-perks-toggle">+ additional defensive Perks</div>
+                <div id="cb-perks-summary" class="extra-summary">- none -</div>
+
+                <div class="modal-overlay" id="cb-perks-modal" style="display:none">
+                    <div class="modal-content">
+                        <h2>Defensive Perks</h2>
+                        <label class="checkbox"><input type="checkbox" id="cb-steel-brow"> Steel Brow <span class="hint">no headshot bonus</span></label>
+                        <label class="checkbox"><input type="checkbox" id="cb-nine-lives"> Nine Lives <span class="hint">survive killing blow</span></label>
+                        <label class="checkbox"><input type="checkbox" id="cb-resilient"> Resilient <span class="hint">-1 turn bleed</span></label>
+                        <label class="checkbox"><input type="checkbox" id="cb-indomitable"> Indomitable <span class="hint">damage received x50%</span></label>
+                        <button class="modal-close" id="cb-perks-modal-close">Done</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="enemy-note" id="enemy-note"></div>
+
+        <div id="racial-modal" class="modal-overlay" style="display:none">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="racial-modal-title">Racial Trait</h3>
+                    <span class="modal-close" id="racial-modal-close">&times;</span>
+                </div>
+                <div id="racial-modal-body"></div>
+            </div>
+        </div>
+
+    </div>
+    <div class="calculate-container">
+        <p class="calculate-hint">Simulate 20,000 attacks to see average # hits to kill</p>
+        <button id="calculate-btn" class="calculate-btn-full">&#9876; Calculate Attacks</button>
+    </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="warning-modal" style="display:none">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Warning</h3>
+            <span class="modal-close" id="warning-modal-x">&times;</span>
+        </div>
+        <div id="warning-modal-body"></div>
+        <div style="display:flex; gap:1rem; margin-top:1.2rem;">
+            <button class="calculate-btn-full" id="warning-modal-ok" style="flex:1;">Calculate Anyway</button>
+            <button class="calculate-btn-full" id="warning-modal-cancel" style="flex:1;">Cancel</button>
+        </div>
+    </div>
+</div>
+
+{% if results %}
+<div id="results" class="results">
+    <div class="results-header">
+        <h2>Results</h2>
+        <span class="results-subtitle"><strong>{{ results.hits_to_kill.avg_hits_to_kill }}</strong> hits on average{% if results.buff_name or results.champion %} for {% if results.buff_name %}{{ results.buff_name }}{% endif %}{% if results.champion %}{% if results.buff_name %} {% endif %}Champion{% endif %}{% endif %} to kill {{ results.enemy_name }} with {{ results.weapon_name }}</span>
+    </div>
+    <div class="results-grid">
+        <div id="histogram-container">
+            <div class="histogram-tabs">
+                <button class="histogram-tab active" data-tab="kill">Hits to Kill</button>
+                <button class="histogram-tab" data-tab="injury">Hits to Injure</button>
+                <button class="histogram-tab" data-tab="resolve">Morale Check</button>
+                <button class="histogram-tab" data-tab="fearsome">w/ Fearsome</button>
+            </div>
+            <canvas id="histogram" width="600" height="300"></canvas>
+        </div>
+        <div class="results-details">
+            <h3>Hits to Kill</h3>
+            <div class="stat-row"><span class="stat-label">Average Hits to Kill</span><span class="stat-value">{{ results.hits_to_kill.avg_hits_to_kill }}</span></div>
+            <div class="stat-row"><span class="stat-label">Min &amp; Max Hits</span><span class="stat-value">{{ results.hits_to_kill.distribution[0].hits }} to {{ results.hits_to_kill.distribution[-1].hits }}</span></div>
+
+            <h3>Hits to Injure</h3>
+            {% if results.hits_to_kill.injury %}
+            <div class="stat-row"><span class="stat-label">Average Hits to Injure</span><span class="stat-value">{{ results.hits_to_kill.injury.avg }}</span></div>
+            <div class="stat-row"><span class="stat-label">Min &amp; Max Hits</span><span class="stat-value">{{ results.hits_to_kill.injury.min }} to {{ results.hits_to_kill.injury.max }}</span></div>
+            {% elif results.injury_immune %}
+            <div class="stat-row"><span class="stat-label">Average Hits to Injure</span><span class="stat-value">immune</span></div>
+            {% else %}
+            <div class="stat-row"><span class="stat-label">Average Hits to Injure</span><span class="stat-value">impossible</span></div>
+            {% endif %}
+
+            <h3>Morale Check <span class="hint">at least 15 HP dmg</span></h3>
+            {% if results.morale_immune %}
+            <div class="stat-row"><span class="stat-label">Morale</span><span class="stat-value">immune</span></div>
+            {% elif results.hits_to_kill.resolve %}
+            <div class="stat-row"><span class="stat-label">Average Hits to Trigger</span><span class="stat-value">{{ results.hits_to_kill.resolve.avg }}</span></div>
+            <div class="stat-row"><span class="stat-label">Min &amp; Max Hits</span><span class="stat-value">{{ results.hits_to_kill.resolve.min }} to {{ results.hits_to_kill.resolve.max }}</span></div>
+            {% else %}
+            <div class="stat-row"><span class="stat-label">Average Hits to Trigger</span><span class="stat-value">impossible</span></div>
+            {% endif %}
+
+            <h3>Morale Check with Fearsome <span class="hint">at least 1 HP dmg</span></h3>
+            {% if results.morale_immune %}
+            <div class="stat-row"><span class="stat-label">Morale</span><span class="stat-value">immune</span></div>
+            {% elif results.hits_to_kill.fearsome %}
+            <div class="stat-row"><span class="stat-label">Average Hits to Trigger</span><span class="stat-value">{{ results.hits_to_kill.fearsome.avg }}</span></div>
+            <div class="stat-row"><span class="stat-label">Min &amp; Max Hits</span><span class="stat-value">{{ results.hits_to_kill.fearsome.min }} to {{ results.hits_to_kill.fearsome.max }}</span></div>
+            {% else %}
+            <div class="stat-row"><span class="stat-label">Average Hits to Trigger</span><span class="stat-value">impossible</span></div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if results and results.hits_to_kill.damage_stats %}
+{% set ds = results.hits_to_kill.damage_stats %}
+<div class="damage-stats">
+    <h2>Damage Stats</h2>
+
+    <div class="stats-grid-4">
+        <div class="stat-card">
+            <h3>Peak Damage on First Hit</h3>
+            <div class="stat-vertical-value"><span class="stat-number stat-number-fixed">{{ ds.max_first_hit_hp }}</span> <span class="stat-unit">HP Damage</span></div>
+            <div class="stat-vertical-value"><span class="stat-number stat-number-fixed">{{ ds.max_first_hit_armor }}</span> <span class="stat-unit">Armor Damage</span></div>
+        </div>
+        <div class="stat-card">
+            <h3>Peak Damage on Hit</h3>
+            <div class="stat-vertical-value"><span class="stat-number stat-number-fixed">{{ ds.max_any_hit_hp }}</span> <span class="stat-unit">HP Damage</span></div>
+            <div class="stat-vertical-value"><span class="stat-number stat-number-fixed">{{ ds.max_any_hit_armor }}</span> <span class="stat-unit">Armor Damage</span></div>
+        </div>
+        <div class="stat-card">
+            <h3>&Oslash; Armor Left at Death</h3>
+            <div class="stat-vertical-value"><span class="stat-number stat-number-fixed">{{ ds.avg_body_armor_remaining }}</span> <span class="stat-unit">Body Armor</span></div>
+            <div class="stat-vertical-value"><span class="stat-number stat-number-fixed">{{ ds.avg_head_armor_remaining }}</span> <span class="stat-unit">Head Armor</span></div>
+        </div>
+        <div class="stat-card">
+            <h3>Killing Blow</h3>
+            <div class="stat-vertical-value"><span class="stat-number stat-number-fixed">{{ ds.kill_body_pct }}%</span> <span class="stat-unit">Bodyshot</span></div>
+            <div class="stat-vertical-value"><span class="stat-number stat-number-fixed">{{ ds.kill_head_pct }}%</span> <span class="stat-unit">Headshot</span></div>
+            {% if ds.kill_bleed_pct > 0 %}<div class="stat-vertical-value"><span class="stat-number stat-number-fixed">{{ ds.kill_bleed_pct }}%</span> <span class="stat-unit">Bleed Tick</span></div>{% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="how-it-works">
+    <h2>Battle Brothers Damage Mechanics</h2>
+
+    <h3>Damage Calculation</h3>
+    <p>The damage formula has three scenarios:</p>
+    <ul>
+        <li><strong>No armor on the body part.</strong> Damage directly removes HP.</li>
+        <li><strong>Armor destroyed in the process.</strong> The excess damage that wasn't needed to destroy armor flows through as direct HP damage, combined with the piercing portion.</li>
+        <li><strong>Armor survives the attack.</strong> One roll determines armor damage, a separate roll determines piercing HP damage. The HP damage is reduced by 10% of remaining armor.</li>
+    </ul>
+
+    <h3>Attacker Traits and Perks</h3>
+    <p>We model all traits, perks, backgrounds, injuries, and status effects that affect damage output. Damage multipliers (Huge, Drunkard, Killing Frenzy, etc.) stack multiplicatively. For example, Huge (x1.10) combined with Drunkard (x1.10) results in x1.21 total damage. Perks like Duelist add to piercing additively (+25%).</p>
+
+    <h3>Weapon</h3>
+    <p>Each hit rolls two independent random values within the weapon's damage range: one for HP damage and one for armor damage. Piercing Percentage determines how much HP damage bypasses armor.</p>
+
+    <h3>Weapon Skills</h3>
+    <p>Each weapon has one or more skills with different effects. Some modify damage, piercing, or apply bleeding.</p>
+
+    <h3>Headshots and Body Hits</h3>
+    <p>Each hit targets either the head (25% base chance) or the body (75%). Headshots hit the helmet, body hits hit body armor. Headshots deal 150% HP damage.</p>
+
+    <h3>Armor and HP</h3>
+    <p>Armor durability is tracked separately for head and body and degrades over multiple hits. Each weapon has an Armor Damage % that determines how efficiently it damages armor. Hammers at 150% shred armor fast, while daggers at 50% barely scratch it. Piercing HP damage that bypasses armor is further reduced by 10% of remaining armor on that body part. Once armor reaches zero, that body part takes full damage.</p>
+
+    <h3>Defender Perks</h3>
+    <p>The simulation applies Battle Forged, Nimble, Steel Brow, Nine Lives, and Resilient automatically based on the selected enemy. For Custom Brother, you can also enable Indomitable, which is then applied to every hit. Units can have other perks, but these would not affect hits to kill, injure or trigger morale.</p>
+
+    <h3>Racial Traits</h3>
+    <p>Some enemies have immunities to bleeding, injuries or morale checks. Others have more complex resistances to certain attacks. All of these are listed as Racial Traits in the enemy stat card. For enemies with damage resistances, you can click the trait name to see the full resistance table.</p>
+    <p>Three groups have damage resistances:</p>
+    <ul>
+        <li><strong>Alps, Ancient Dead, and Ifrits</strong> have resistances to ranged weapons and piercing melee attacks. Alps are "Existing Partly in Dreams", Ancient Dead are "Resistant to Ranged Attacks", and Ifrits have the "Sand Golem" trait. The three are similar but slightly different.</li>
+        <li><strong>Schrats and Serpents</strong> have resistances to ranged attacks, but unlike the first group they are not resistant to piercing melee. Schrats also reduce all incoming damage to 30% while their root shield is up, but this is not modeled. You should destroy the shield with axes first anyhow.</li>
+        <li><strong>Fallen Betrayer</strong> takes 25% less armor damage, making his armor degrade slower.</li>
+    </ul>
+
+    <h3>Hits to Kill</h3>
+    <p>The average number of hits needed to reduce the enemy's HP to zero.</p>
+
+    <h3>Hits to Injure</h3>
+    <p>An injury occurs when a single hit deals HP damage equal to or greater than 25% of the enemy's maximum HP. Head injuries require a higher threshold of 31.25% (25% &times; 1.25), but the 150% headshot damage more than offsets this. Crippling Strikes lowers all injury thresholds by 34%.</p>
+
+    <h3>Hits to Trigger Morale Check</h3>
+    <p>A morale check is triggered when a single hit deals at least 15 HP damage. With the Fearsome perk, the threshold drops to just 1 HP damage. We simulate when the first morale check occurs, but not whether morale actually drops.</p>
+
+    <h2>About the Calculator</h2>
+
+    <h3>Simulation</h3>
+    <p>Each calculation runs a Monte Carlo simulation. The total number of simulations depends on the weapon's damage range, but at least 20,000. For the first hit we use "Stratified First-Hit Sampling", see below. From the second hit onward, damage rolls are fully random. Headshot chance and armor loadout are randomly rolled throughout. Simulations are capped at 100 hits. If a matchup consistently exceeds 100 hits, it is likely not a viable combat approach anyhow.</p>
+
+    <h3>Stratified First-Hit Sampling</h3>
+    <p>For the first hit, every possible combination of the two independent damage rolls (regular damage and armor damage) is sampled an equal number of times. This ensures that all first-hit outcomes are represented fairly, eliminating sampling bias.</p>
+    <p>Three-Headed Flail is the exception. Multi-hit skills like Cascade do 3 sub-hits per attack, each with its own pair of damage rolls. Fully enumerating all 6 rolls would require millions of combinations, so only the first sub-hit's rolls are stratified. The other two sub-hits use random sampling.</p>
+
+    <h3>Peak Damage</h3>
+    <p>Peak first-hit damage (both HP and armor) is calculated deterministically, not sampled. We take the maximum damage roll against the weakest armor loadout, for both body and head hits, and report the higher result. This means peak values are always exact regardless of simulation outcome.</p>
+
+    <h3>Editable Weapon Stats</h3>
+    <p>All weapon stats are editable. If you have a Named Weapon with different damage, armor piercing or headshot bonus, edit the stats directly and the simulation will use your values.</p>
+
+    <h3>Battle Forged and Nimble</h3>
+    <p>Battle Forged reduces armor damage based on current total armor. As armor is destroyed during the fight, Battle Forged becomes weaker. The percentage shown next to the checkbox is the starting value; the simulation recalculates it after every hit. Battle Forged makes high armor disproportionately strong. 300/300 armor with Battle Forged offers around 713 effective armor. But 360/360 armor with Battle Forged (a 20% raw increase) offers around 893 effective armor (a 25% effective increase).</p>
+    <p>Nimble scales off armor fatigue: lower fatigue means stronger reduction, down to 40% HP damage taken at 15 fatigue. The in-game tooltip rounds the Nimble percentage, but internally it is a float, and our calculator uses the exact value. The multiplier is applied before armor absorption, so both layers stack nicely. This makes Named armor with high durability and low fatigue very strong in preventing Piercing damage. For example, a hit dealing 80 damage with 100% armor damage and 50% piercing:</p>
+    <ul>
+        <li><strong>Against 100 armor, no Nimble:</strong> 80 damage removes 80 armor, leaving 20. Piercing is 80 &times; 50% = 40. Remaining armor absorbs 20 &times; 10% = 2. Total: 38 HP damage.</li>
+        <li><strong>Against 200 armor, Nimble 40%:</strong> Piercing is 80 &times; 50% = 40. Nimble reduces that to 40 &times; 40% = 16. The hit removes 80 armor, leaving 120. Remaining armor absorbs 120 &times; 10% = 12. Total: only 4 HP damage.</li>
+    </ul></p>
+
+    <h3>Attacker Buffs and Champion</h3>
+    <p>Some enemies deal more damage than their weapon stats suggest. These are enemy-only modifiers that player mercenaries cannot have. Orcs have racial damage multipliers that scale with campaign day. Similarly Barbarian King, Hedge Knight, and Executioner have a x120% damage multiplier. Whereas Goblins and Master Archer have increased armor piercing. This can make regular enemies so deadly, that they can one-shot your 300/300 Battle Forged Brothers. See the calculations here:</p>
+    <p><a href="/damage-calculator?weapon=berserk-chain&amp;enemy=custom-brother&amp;skill=pound-mastery&amp;buff=orc-berserker-late-day-190&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf">Orc Berserker (Berserk Chain) with maximum Damage</a> (92 HP Damage)</p>
+    <p><a href="/damage-calculator?weapon=man-splitter&amp;enemy=custom-brother&amp;skill=split-man&amp;buff=orc-warlord-late-day-200&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf">Orc Warlord (Man Splitter) with maximum Damage</a> (104 HP Damage)</p>
+    <p>Champion enemies receive x115% damage which stacks multiplicatively with all other damage buffs. They also have increased HP, increased stats and a named item. If the named item is a weapon with a high damage roll and/or high armor piercing roll, a champion becomes especially deadly.</p>
+    <p>The deadliest combination is an enemy with a damage modifier (e.g. Hedge Knight, Barbarian King or Warlord), that is also Champion and has a Named Weapon with high-rolled damage. He could in theory one-shot your Battle Forged Brother with 300/300 armor and Steel Brow. Brothers with Nimble are less likely to get one-shotted. See the calculations here:</p>
+    <p><a href="/damage-calculator?weapon=two-handed-flail&amp;enemy=custom-brother&amp;skill=pound-mastery&amp;buff=hedge-knight&amp;champion=1&amp;cb_hp=100&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb&amp;dmin=59&amp;dmax=117&amp;ap=46&amp;dap=115&amp;hs=15">Hedge Knight Champion (Two-Handed Flail) with maximum Damage</a> (110 HP damage through Steel Brow)</p>
+    <p><a href="/damage-calculator?weapon=two-handed-hammer&amp;enemy=custom-brother&amp;skill=smite&amp;buff=hedge-knight&amp;champion=1&amp;cb_hp=100&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb&amp;dmin=78&amp;dmax=117&amp;ap=66&amp;dap=200&amp;hs=0">Hedge Knight Champion (Two-Handed Hammer) with maximum Damage</a> (121 HP damage through Steel Brow)</p>
+    <p><a href="/damage-calculator?weapon=two-handed-skull-hammer&amp;enemy=custom-brother&amp;skill=smite&amp;buff=barbarian-king&amp;champion=1&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb&amp;dmin=59&amp;dmax=85&amp;ap=76&amp;dap=180&amp;hs=0">Barbarian King Champion (Two-Handed Skull Hammer) with maximum Damage</a> (98 HP damage through Steel Brow)</p>
+    <p><a href="/damage-calculator?weapon=man-splitter&amp;enemy=custom-brother&amp;skill=split-man&amp;buff=orc-warlord-late-day-200&amp;champion=1&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb">Orc Warlord Champion (Man Splitter) with maximum Damage</a> (93 HP damage through Steel Brow)</p>
+    <p><a href="/damage-calculator?weapon=heavy-rusty-axe&amp;enemy=custom-brother&amp;skill=split-man&amp;buff=barbarian-king&amp;champion=1&amp;cb_hp=90&amp;cb_body=110&amp;cb_head=105&amp;cb_perks=nimble&amp;cb_fat=17&amp;dmin=98&amp;dmax=117&amp;ap=66&amp;dap=150&amp;hs=0">Barbarian King Champion (Heavy Rusty Axe) with maximum Damage</a> (91 HP damage through Nimble)</p>
+
+    <h3>Bleeding</h3>
+    <p>Cleave and Whip skills apply bleeding (5 per turn, 10 with Weapon Mastery). Bleeding only triggers when the hit deals at least 6 HP damage. Bleed is a 2-turn stacking effect that ticks on the enemy's turn. Multiple bleeds from consecutive hits overlap, so the second qualifying hit onwards causes two stacks to tick simultaneously. Resilient halves bleed duration to 1 turn, preventing stack overlap. Nine Lives clears all bleed.</p>
+    <p>In actual combat, bleed damage depends on turn order, number of attacks per turn, and whether you miss while bleeds are still ticking. A miss means no new bleed stack, but existing stacks keep ticking. Our simulation assumes one bleed tick between each attack, one attack per turn, and that every hit lands, which is a reasonable approximation but not exact.</p>
+
+    <h3>Shown Skills</h3>
+    <p>All weapon skills are shown except Split Shield (deals no HP damage). Skills like Riposte that deal the same damage as the basic attack are included for completeness. Spearwall deals 50% damage per counter-hit. Mastery variants are only shown when mastery affects damage-relevant stats (like Cleave's increasing bleed or Pound's increasing Armor Piercing).</p>
+
+    <h3>Enemy Armor Loadouts</h3>
+    <p>Enemies with variable equipment have multiple possible armor loadouts. Each simulation randomly picks a body armor and helmet combination weighted by spawn probability. For example, a Brigand Raider has 4 body armor options and 6 helmet options, resulting in 24 different possible loadouts. This means results reflect the full range of encounters.</p>
+
+    <h3>Noble House Equipment</h3>
+    <p>Noble faction enemies (Footman, Billman, Arbalester, etc.) spawn with equipment that varies by noble house. Different houses use different armor styles (kettle hats vs flat tops vs nasal helmets). Since the noble house is random, we average across all houses to produce a single combined loadout table.</p>
+
+    <h3>DLC Equipment</h3>
+    <p>Some enemies gain additional armor options when DLCs are active (Warriors of the North, Blazing Deserts, etc.). Our loadout data assumes all DLCs are installed. Without certain DLCs, some enemies would have fewer equipment options and slightly different average armor values.</p>
+
+    <h3>Incompatible Modifier Warnings</h3>
+    <p>The calculator warns you when a selected modifier does not apply to the current weapon or skill. Examples are Duelist with a two-handed weapon or headshot modifiers with Puncture (which never headshots). In all cases the calculator blocks the submission and tells you which modifiers will be ignored.</p>
+
+    <h3>Not Modeled: Lower Enemies, Champions, Bosses</h3>
+    <p>Some enemies can spawn as lower versions (e.g. lower Brigand Raider) with slightly reduced stats and on average less armor. For example early-game Brigand Parties can have a mixture of regular Raiders and lower Raiders. But overall these lower enemies are rare and only account for roughly 15% of all encounters, so they are not modeled here.</p>
+    <p>Champions are buffed enemies with a named item. If the named item is a Named Armor, it can have significantly higher durability. This changes survivability drastically, so we do not model champion defenders.</p>
+    <p>Bosses like the Kraken and the Horned God in Hunting Ground have extremely high HP and armor pools. These fights are too unique to produce meaningful simulation results, so we do not model them.</p>
+
+    <h3>Caching</h3>
+    <p>Results are cached per unique matchup. The first time you run a specific combination of weapon, skill, enemy, and modifiers, the simulation runs fresh. Subsequent requests for the same matchup return the cached result instantly. If we update the damage engine, the cache is cleared so all matchups use the latest formulas.</p>
+
+</div>
+
+<p class="page-about">Built by Pascal Klein (<a href="/">HeyPashi</a>). Questions or feedback? <a href="mailto:heypashi@gmail.com">heypashi@gmail.com</a></p>
+{% endblock %}
+
+{% block scripts %}
+{% if results %}
+<script id="histogram-data" type="application/json">{{ {"kill": results.hits_to_kill.distribution, "injury": results.hits_to_kill.injury_distribution, "resolve": results.hits_to_kill.resolve_distribution, "fearsome": results.hits_to_kill.fearsome_distribution, "injury_immune": results.injury_immune, "morale_immune": results.morale_immune} | tojson }}</script>
+{% endif %}
+<!-- bb-engine's ONE JavaScript nimbleMultiplier, served from the sibling repo
+     (app.py /bb-engine/<path>). calculator.js reuses it for the live Nimble %
+     preview - no copied formula. Loaded BEFORE calculator.js, which calls it. -->
+<script src="/bb-engine/attack.js?v={{ cache_bust }}"></script>
+<script src="{{ url_for('static', filename='calculator.js') }}?v={{ cache_bust }}"></script>
+{% endblock %}

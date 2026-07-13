@@ -1,0 +1,34 @@
+# bloodngold.com
+
+HeyPashi's Battle Brothers community site.
+Tools, mods, and resources for Battle Brothers players.
+
+
+## Tools
+
+Damage Calculator
+https://bloodngold.com/damage-calculator
+Simulate hits to kill across all enemy armor loadouts.
+Pick weapon, enemy, skills, and perks.
+
+Damage Calculation Spec
+https://bloodngold.com/damage-spec
+Full breakdown of how Battle Brothers calculates damage,
+armor, injuries, and morale.
+
+
+## Mods
+
+Location Scouting
+https://www.nexusmods.com/battlebrothers/mods/980
+Battle Brothers mod that reveals location type before entering.
+
+
+## About
+
+Created by HeyPashi.
+Battle Brothers content creator.
+
+YouTube:  https://www.youtube.com/@HeyPashi
+Twitch:   https://www.twitch.tv/heypashi
+Reddit:   https://www.reddit.com/user/HeyPashi/

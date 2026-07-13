@@ -1,0 +1,70 @@
+import pathlib
+import time
+
+from flask import Flask, redirect, request, send_from_directory
+
+
+# Sibling bb-engine repo's browser JS (its nimbleMultiplier is the ONE JavaScript
+# home for the Nimble formula), served at /bb-engine/<path> so the damage
+# calculator reuses it instead of a copied formula. Located depth-robustly:
+# bb-engine sits beside this workspace (bloodngold-projects/ locally, /var/www/
+# on the box).
+def _bb_engine_js_dir():
+    for anc in pathlib.Path(__file__).resolve().parents:
+        if (anc / "bb-engine" / "js").is_dir():
+            return anc / "bb-engine" / "js"
+    raise RuntimeError("bb-engine/js sibling not found above " + __file__)
+
+
+_BB_ENGINE_JS = _bb_engine_js_dir()
+
+
+def create_app():
+    app = Flask(__name__)
+    app.config.from_object('config')
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max upload
+
+    @app.context_processor
+    def inject_cache_bust():
+        return {'cache_bust': int(time.time())}
+
+    from tools.routes import tools_bp
+    app.register_blueprint(tools_bp)
+
+    @app.route('/bb-engine/<path:path>')
+    def bb_engine_js(path):
+        """Serve bb-engine's browser JS (attack.js) from the sibling repo so the
+        damage calculator reuses bb-engine's ONE nimbleMultiplier."""
+        return send_from_directory(_BB_ENGINE_JS, path)
+
+    @app.route('/robots.txt')
+    def robots_txt():
+        return send_from_directory(app.static_folder, 'robots.txt')
+
+    @app.route('/sitemap.xml')
+    def sitemap_xml():
+        return send_from_directory(app.static_folder, 'sitemap.xml',
+                                   mimetype='application/xml')
+
+    @app.route('/calculator', strict_slashes=False)
+    def old_calculator_redirect():
+        qs = request.query_string.decode()
+        target = '/damage-calculator'
+        if qs:
+            target += '?' + qs
+        return redirect(target, code=301)
+
+    @app.route('/')
+    def index():
+        return redirect('/damage-calculator', code=302)
+
+    @app.errorhandler(404)
+    def not_found(e):
+        return redirect('/damage-calculator', code=302)
+
+    return app
+
+
+if __name__ == '__main__':
+    app = create_app()
+    app.run(debug=True, port=5002)

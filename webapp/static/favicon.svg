@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <radialGradient id="coin" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#f5d96b"/>
+      <stop offset="50%" stop-color="#d4a017"/>
+      <stop offset="100%" stop-color="#9a7209"/>
+    </radialGradient>
+    <radialGradient id="drop" cx="45%" cy="35%" r="55%">
+      <stop offset="0%" stop-color="#ef4444"/>
+      <stop offset="50%" stop-color="#cc1a1a"/>
+      <stop offset="100%" stop-color="#7f0000"/>
+    </radialGradient>
+    <radialGradient id="dropShine" cx="35%" cy="25%" r="30%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Gold coin — top-down view, edge to edge -->
+  <circle cx="16" cy="16" r="16" fill="url(#coin)" stroke="#7a5a0a" stroke-width="0.5"/>
+  <circle cx="16" cy="16" r="13" fill="none" stroke="#b8930f" stroke-width="0.8" opacity="0.4"/>
+  <!-- Blood drop centered on coin -->
+  <path d="M16 5 Q11 15 11 19 A5 5 0 0 0 21 19 Q21 15 16 5Z" fill="url(#drop)"/>
+  <!-- Shine on blood drop -->
+  <ellipse cx="14" cy="14" rx="2" ry="3" fill="url(#dropShine)"/>
+</svg>
