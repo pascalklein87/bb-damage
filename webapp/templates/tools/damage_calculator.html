@@ -14,7 +14,7 @@
   "@context": "https://schema.org",
   "@type": "WebApplication",
   "name": "Battle Brothers Damage Calculator",
-  "url": "https://bloodngold.com/damage-calculator",
+  "url": "https://damage.bloodngold.com/",
   "description": "Calculate hits to kill for every weapon, skill, and enemy in Battle Brothers. Monte Carlo simulation with 20,000+ runs per scenario.",
   "applicationCategory": "GameApplication",
   "operatingSystem": "Any",
@@ -36,7 +36,7 @@
 {% set breadcrumbs = [{'url': '/', 'label': 'Home'}, {'label': 'Damage Calculator'}] %}
 {% include 'breadcrumb.html' with context %}
 <!-- h1 is clickable so user can reset the calculator to default state -->
-<h1><a href="/damage-calculator" style="color: inherit; text-decoration: underline;">Battle Brothers Damage Calculator</a></h1>
+<h1><a href="/" style="color: inherit; text-decoration: underline;">Battle Brothers Damage Calculator</a></h1>
 {% endblock %}
 
 {% block content %}
@@ -480,15 +480,15 @@
 
     <h3>Attacker Buffs and Champion</h3>
     <p>Some enemies deal more damage than their weapon stats suggest. These are enemy-only modifiers that player mercenaries cannot have. Orcs have racial damage multipliers that scale with campaign day. Similarly Barbarian King, Hedge Knight, and Executioner have a x120% damage multiplier. Whereas Goblins and Master Archer have increased armor piercing. This can make regular enemies so deadly, that they can one-shot your 300/300 Battle Forged Brothers. See the calculations here:</p>
-    <p><a href="/damage-calculator?weapon=berserk-chain&amp;enemy=custom-brother&amp;skill=pound-mastery&amp;buff=orc-berserker-late-day-190&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf">Orc Berserker (Berserk Chain) with maximum Damage</a> (92 HP Damage)</p>
-    <p><a href="/damage-calculator?weapon=man-splitter&amp;enemy=custom-brother&amp;skill=split-man&amp;buff=orc-warlord-late-day-200&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf">Orc Warlord (Man Splitter) with maximum Damage</a> (104 HP Damage)</p>
+    <p><a href="/?weapon=berserk-chain&amp;enemy=custom-brother&amp;skill=pound-mastery&amp;buff=orc-berserker-late-day-190&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf">Orc Berserker (Berserk Chain) with maximum Damage</a> (92 HP Damage)</p>
+    <p><a href="/?weapon=man-splitter&amp;enemy=custom-brother&amp;skill=split-man&amp;buff=orc-warlord-late-day-200&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf">Orc Warlord (Man Splitter) with maximum Damage</a> (104 HP Damage)</p>
     <p>Champion enemies receive x115% damage which stacks multiplicatively with all other damage buffs. They also have increased HP, increased stats and a named item. If the named item is a weapon with a high damage roll and/or high armor piercing roll, a champion becomes especially deadly.</p>
     <p>The deadliest combination is an enemy with a damage modifier (e.g. Hedge Knight, Barbarian King or Warlord), that is also Champion and has a Named Weapon with high-rolled damage. He could in theory one-shot your Battle Forged Brother with 300/300 armor and Steel Brow. Brothers with Nimble are less likely to get one-shotted. See the calculations here:</p>
-    <p><a href="/damage-calculator?weapon=two-handed-flail&amp;enemy=custom-brother&amp;skill=pound-mastery&amp;buff=hedge-knight&amp;champion=1&amp;cb_hp=100&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb&amp;dmin=59&amp;dmax=117&amp;ap=46&amp;dap=115&amp;hs=15">Hedge Knight Champion (Two-Handed Flail) with maximum Damage</a> (110 HP damage through Steel Brow)</p>
-    <p><a href="/damage-calculator?weapon=two-handed-hammer&amp;enemy=custom-brother&amp;skill=smite&amp;buff=hedge-knight&amp;champion=1&amp;cb_hp=100&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb&amp;dmin=78&amp;dmax=117&amp;ap=66&amp;dap=200&amp;hs=0">Hedge Knight Champion (Two-Handed Hammer) with maximum Damage</a> (121 HP damage through Steel Brow)</p>
-    <p><a href="/damage-calculator?weapon=two-handed-skull-hammer&amp;enemy=custom-brother&amp;skill=smite&amp;buff=barbarian-king&amp;champion=1&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb&amp;dmin=59&amp;dmax=85&amp;ap=76&amp;dap=180&amp;hs=0">Barbarian King Champion (Two-Handed Skull Hammer) with maximum Damage</a> (98 HP damage through Steel Brow)</p>
-    <p><a href="/damage-calculator?weapon=man-splitter&amp;enemy=custom-brother&amp;skill=split-man&amp;buff=orc-warlord-late-day-200&amp;champion=1&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb">Orc Warlord Champion (Man Splitter) with maximum Damage</a> (93 HP damage through Steel Brow)</p>
-    <p><a href="/damage-calculator?weapon=heavy-rusty-axe&amp;enemy=custom-brother&amp;skill=split-man&amp;buff=barbarian-king&amp;champion=1&amp;cb_hp=90&amp;cb_body=110&amp;cb_head=105&amp;cb_perks=nimble&amp;cb_fat=17&amp;dmin=98&amp;dmax=117&amp;ap=66&amp;dap=150&amp;hs=0">Barbarian King Champion (Heavy Rusty Axe) with maximum Damage</a> (91 HP damage through Nimble)</p>
+    <p><a href="/?weapon=two-handed-flail&amp;enemy=custom-brother&amp;skill=pound-mastery&amp;buff=hedge-knight&amp;champion=1&amp;cb_hp=100&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb&amp;dmin=59&amp;dmax=117&amp;ap=46&amp;dap=115&amp;hs=15">Hedge Knight Champion (Two-Handed Flail) with maximum Damage</a> (110 HP damage through Steel Brow)</p>
+    <p><a href="/?weapon=two-handed-hammer&amp;enemy=custom-brother&amp;skill=smite&amp;buff=hedge-knight&amp;champion=1&amp;cb_hp=100&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb&amp;dmin=78&amp;dmax=117&amp;ap=66&amp;dap=200&amp;hs=0">Hedge Knight Champion (Two-Handed Hammer) with maximum Damage</a> (121 HP damage through Steel Brow)</p>
+    <p><a href="/?weapon=two-handed-skull-hammer&amp;enemy=custom-brother&amp;skill=smite&amp;buff=barbarian-king&amp;champion=1&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb&amp;dmin=59&amp;dmax=85&amp;ap=76&amp;dap=180&amp;hs=0">Barbarian King Champion (Two-Handed Skull Hammer) with maximum Damage</a> (98 HP damage through Steel Brow)</p>
+    <p><a href="/?weapon=man-splitter&amp;enemy=custom-brother&amp;skill=split-man&amp;buff=orc-warlord-late-day-200&amp;champion=1&amp;cb_hp=90&amp;cb_body=300&amp;cb_head=300&amp;cb_perks=bf_sb">Orc Warlord Champion (Man Splitter) with maximum Damage</a> (93 HP damage through Steel Brow)</p>
+    <p><a href="/?weapon=heavy-rusty-axe&amp;enemy=custom-brother&amp;skill=split-man&amp;buff=barbarian-king&amp;champion=1&amp;cb_hp=90&amp;cb_body=110&amp;cb_head=105&amp;cb_perks=nimble&amp;cb_fat=17&amp;dmin=98&amp;dmax=117&amp;ap=66&amp;dap=150&amp;hs=0">Barbarian King Champion (Heavy Rusty Axe) with maximum Damage</a> (91 HP damage through Nimble)</p>
 
     <h3>Bleeding</h3>
     <p>Cleave and Whip skills apply bleeding (5 per turn, 10 with Weapon Mastery). Bleeding only triggers when the hit deals at least 6 HP damage. Bleed is a 2-turn stacking effect that ticks on the enemy's turn. Multiple bleeds from consecutive hits overlap, so the second qualifying hit onwards causes two stacks to tick simultaneously. Resilient halves bleed duration to 1 turn, preventing stack overlap. Nine Lives clears all bleed.</p>
@@ -519,7 +519,7 @@
 
 </div>
 
-<p class="page-about">Built by Pascal Klein (<a href="/">HeyPashi</a>). Questions or feedback? <a href="mailto:heypashi@gmail.com">heypashi@gmail.com</a></p>
+<p class="page-about">Built by Pascal Klein (<a href="https://bloodngold.com/">HeyPashi</a>). Questions or feedback? <a href="mailto:heypashi@gmail.com">heypashi@gmail.com</a></p>
 {% endblock %}
 
 {% block scripts %}

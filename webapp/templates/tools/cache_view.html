@@ -31,7 +31,7 @@
             <td style="padding:8px;">{{ row.count }}</td>
             <td style="padding:8px; white-space:nowrap;">{{ '{:,}'.format(row.num_simulations) }}</td>
             <td style="padding:8px; font-family:monospace; font-size:12px;">{{ row.hash[:16] }}...</td>
-            <td style="padding:8px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><a href="/damage-calculator?{{ row.url }}">{{ row.url }}</a></td>
+            <td style="padding:8px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><a href="/?{{ row.url }}">{{ row.url }}</a></td>
             <td style="padding:8px; white-space:nowrap;">{{ row.json_size }} B</td>
             <td style="padding:8px; white-space:nowrap;">{{ row.avg_hits }}</td>
             <td style="padding:8px; white-space:nowrap;">{% if row.last_used %}{{ row.last_used[:10] }} &nbsp;&nbsp; <span style="color:#888;">{{ row.last_used[11:16] }}</span>{% endif %}</td>

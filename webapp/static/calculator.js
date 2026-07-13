@@ -543,7 +543,7 @@ $(function() {
             parts.push('hs=' + curHs);
         }
 
-        var url = '/damage-calculator?' + parts.join('&') + window.location.hash;
+        var url = '/?' + parts.join('&') + window.location.hash;
         if (window.location.href === url || window.location.href === window.location.origin + url) {
             window.location.reload();
         } else {

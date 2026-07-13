@@ -1,7 +1,7 @@
 import pathlib
 import time
 
-from flask import Flask, redirect, request, send_from_directory
+from flask import Flask, redirect, request, render_template, send_from_directory
 
 
 # Sibling bb-engine repo's browser JS (its nimbleMultiplier is the ONE JavaScript
@@ -28,6 +28,7 @@ def create_app():
     def inject_cache_bust():
         return {'cache_bust': int(time.time())}
 
+    # Calculator at / and the cache view at /cache (tools_bp has no url_prefix).
     from tools.routes import tools_bp
     app.register_blueprint(tools_bp)
 
@@ -36,6 +37,10 @@ def create_app():
         """Serve bb-engine's browser JS (attack.js) from the sibling repo so the
         damage calculator reuses bb-engine's ONE nimbleMultiplier."""
         return send_from_directory(_BB_ENGINE_JS, path)
+
+    @app.route('/spec')
+    def spec():
+        return render_template('damage_spec.html')
 
     @app.route('/robots.txt')
     def robots_txt():
@@ -46,21 +51,24 @@ def create_app():
         return send_from_directory(app.static_folder, 'sitemap.xml',
                                    mimetype='application/xml')
 
-    @app.route('/calculator', strict_slashes=False)
-    def old_calculator_redirect():
+    # Legacy paths from when the calculator lived at bloodngold.com/damage-calculator.
+    @app.route('/damage-calculator', strict_slashes=False)
+    def legacy_calculator():
         qs = request.query_string.decode()
-        target = '/damage-calculator'
-        if qs:
-            target += '?' + qs
-        return redirect(target, code=301)
+        return redirect('/?' + qs if qs else '/', code=301)
 
-    @app.route('/')
-    def index():
-        return redirect('/damage-calculator', code=302)
+    @app.route('/damage-calculator/cache')
+    def legacy_cache():
+        return redirect('/cache', code=301)
+
+    @app.route('/calculator', strict_slashes=False)
+    def legacy_calculator_short():
+        qs = request.query_string.decode()
+        return redirect('/?' + qs if qs else '/', code=301)
 
     @app.errorhandler(404)
     def not_found(e):
-        return redirect('/damage-calculator', code=302)
+        return redirect('/', code=302)
 
     return app
 

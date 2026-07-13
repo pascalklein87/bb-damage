@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}Battle Brothers Damage Calculation Spec{% endblock %}
+
+{% block meta %}
+<meta name="description" content="Complete specification of the Battle Brothers damage formula. Covers armor, piercing, headshots, perks, bleeding, injuries, and morale checks.">
+{% endblock %}
+
+{% block page_title %}
+{% set breadcrumbs = [{'url': 'https://bloodngold.com/', 'label': 'Home'}, {'label': 'Damage Spec'}] %}
+{% include 'breadcrumb.html' with context %}
+<h1>Battle Brothers Damage Calculation Spec</h1>
+{% endblock %}
+
+{% block content %}
+
+<div class="spec">
+
+<h2>About this Spec</h2>
+<p>I wrote this specification before implementing the <a href="/">Damage Calculator</a>. It documents how Battle Brothers calculates damage under the hood, step by step in plain English with pseudocode.</p>
+<p>If you are a modder working on damage-related mods, or just curious about the exact mechanics, this should give you a complete picture of how every variable interacts. All formulas were derived by studying the game engine independently. I compared results from my calculator with Turtle's calculator that was launched by Osgboy as a webapp (<a href="https://osgboy.pythonanywhere.com/" target="_blank" rel="noopener">see here</a>). I believe my calculator is correct, but I cannot guarantee it.</p>
+
+<h2>How Variables Get Their Values</h2>
+
+<p>The core formula (below) uses variables like DamageTotalPerc and PiercingPerc. This section explains where those values come from.</p>
+
+<h3>Attacker Damage Multiplier (DamageTotalPerc)</h3>
+<p>All damage traits, perks, injuries, and status effects stack multiplicatively into a single multiplier:</p>
+<pre>
+DamageTotalPerc = 1.0
+  * Huge (1.10)             -- trait
+  * Drunkard (1.10)         -- trait
+  * Tiny (0.85)             -- trait
+  * Killing Frenzy (1.25)   -- perk, only while active
+  * Broken Arm (0.50)       -- injury
+  * Split Shoulder (0.50)   -- injury
+  * Cut Arm Sinew (0.60)    -- injury
+  * Injured Shoulder (0.75) -- injury
+  * Dazed (0.75)            -- status effect
+  * Distracted (0.65)       -- status effect
+  * Strange Mushrooms (1.25)-- status effect
+  * Double Grip (1.25)      -- perk, 1-handed weapons only
+
+Example: Huge * Drunkard = 1.10 * 1.10 = 1.21 total, not 1.20.
+</pre>
+
+<h3>Piercing (PiercingPerc)</h3>
+<p>Piercing starts with the weapon's base value, modified by the skill and perks. In Battle Brothers, the skill replaces the weapon's value entirely. In our calculator, we compute it as a delta (weapon base + skill difference), which produces the same result:</p>
+<pre>
+PiercingPerc = WeaponBasePiercing + (SkillPiercing - WeaponBasePiercing)
+             + Duelist (0.25)    -- perk, 1-handed weapons only
+
+Capped at 1.0. Duelist stacks additively on top.
+
+Note: Our delta approach means if a user edits weapon stats for a
+Named weapon, the skill's relative contribution is preserved. For
+example, a Named weapon with +5% piercing and a skill that adds +10%
+over the base will correctly show +15% over the weapon's original base.
+</pre>
+
+<h3>Armor Damage (DamageArmorPerc)</h3>
+<p>Starts with the weapon's base armor damage percentage. Skills can multiply it:</p>
+<pre>
+DamageArmorPerc = WeaponBaseDamageArmorPerc * SkillArmorDamageMult
+
+Destroy Armor:  base x1.50, mastery x2.00
+Demolish Armor: base x1.45, mastery x1.93
+
+Example: Polehammer (185%) with Demolish Armor mastery:
+  1.85 * 1.93 = 3.57 (357% armor damage)
+</pre>
+
+<h3>HP Damage Multiplier (DamageRegularPerc)</h3>
+<p>Usually 1.0. Set to 0.0 for skills that deal no HP damage through the formula (Destroy Armor, Demolish Armor). Decapitate adds the missing HP ratio:</p>
+<pre>
+Decapitate: DamageRegularPerc += (1.0 - CurrentHP / MaxHP)
+
+At 50% HP: DamageRegularPerc = 1.0 + 0.5 = 1.5 (50% more HP damage)
+</pre>
+
+<h3>Headshot Damage (AddedHeadshotDamagePerc)</h3>
+<pre>
+AddedHeadshotDamagePerc = 0.0
+  + 0.50   -- headshot (always, on head hits)
+  + 0.15   -- Brute trait
+  + 0.50   -- Chop skill (1-handed axe)
+
+Steel Brow (defender): cancels the +0.50 headshot bonus and Chop bonus.
+Puncture: cancels the +0.50 headshot bonus (no headshot crit).
+</pre>
+
+<h3>Headshot Chance</h3>
+<p>The game stores a weapon-specific headshot modifier (0% for most weapons, +5% for greatsword, +20% for flails) and adds a universal 25% base at runtime. Our calculator stores the total directly on the weapon:</p>
+<pre>
+HeadshotChance = WeaponHeadshotChance  -- already includes base 25% (e.g. sword 25%, flails 45%)
+  + Juggler (0.05)       -- background
+  + Killer on the Run (0.10) -- background
+</pre>
+
+<h3>Minimum HP Damage (HitpointDamageMinimum)</h3>
+<pre>
+Default: 0 (armor can fully absorb a hit)
+Batter: 10 (always deals at least 10 HP through armor)
+Destroy Armor / Demolish Armor: 10
+</pre>
+
+<h3>Executioner</h3>
+<pre>
+When the target is injured:
+  DamageTotalPerc *= 1.20
+</pre>
+
+<h3>Head Hunter</h3>
+<p>After landing a headshot, the next attack is guaranteed to target the head. Resets after a body hit.</p>
+
+<h2>Core Damage Formula</h2>
+
+<h3>Step 1: Roll damage and apply attacker multipliers</h3>
+<p>Two independent random rolls within the weapon's damage range:</p>
+<pre>
+RegularDamage   = rand(DamageMin, DamageMax) * DamageRegularPerc * DamageTotalPerc
+ArmorDamageRoll = rand(DamageMin, DamageMax) * DamageArmorPerc   * DamageTotalPerc
+</pre>
+<p>The two rolls are independent. You can highroll armor damage but lowroll HP damage, or vice versa.</p>
+
+<h3>Step 2: Apply defender multipliers</h3>
+<pre>
+RegularDamage   = (RegularDamage - RegularDamageReduction)
+                  * DamageRegularReceivedPerc * DamageTotalReceivedPerc
+ArmorDamageRoll = (ArmorDamageRoll - ArmorDamageReduction)
+                  * DamageArmorReceivedPerc * DamageTotalReceivedPerc
+</pre>
+<p>See "Defender Perks" and "Racial Resistances" below for what feeds into these.</p>
+
+<h3>Step 3: Reduce armor durability</h3>
+<pre>
+ArmorRemoved   = min(Armor, ArmorDamageRoll)
+ArmorRemaining = Armor - ArmorRemoved
+</pre>
+<p>If PiercingPerc >= 1.0, armor is bypassed entirely (no durability lost).</p>
+
+<h3>Step 4: Calculate HP damage</h3>
+<p>The formula distinguishes three scenarios:</p>
+
+<p><strong>No armor on the body part:</strong> Damage directly removes HP.</p>
+
+<p><strong>Armor survives the attack:</strong></p>
+<pre>
+HitpointsRemoved = max(0, RegularDamage * PiercingPerc
+                          * DamagePiercingReceivedPerc
+                          - ArmorRemaining * 0.1)
+</pre>
+<p>Remaining armor absorbs 10% per point.</p>
+
+<p><strong>Armor destroyed in the process:</strong> The piercing portion gets through as above, plus the excess damage that wasn't needed to destroy armor flows through as direct HP damage. This term is truncated to an integer before adding to the piercing term:</p>
+<pre>
+HitpointsRemoved += int(max(0, RegularDamage
+                              * max(0.0, 1.0 - PiercingPerc
+                                               * DamagePiercingReceivedPerc)
+                              - ArmorRemoved))
+</pre>
+
+<h3>Step 5: Headshot bonus and minimum floor</h3>
+<pre>
+HitpointsRemoved = HitpointsRemoved * (1.0 + AddedHeadshotDamagePerc)
+HitpointsRemoved = max(round(HitpointsRemoved), HitpointDamageMinimum)
+</pre>
+<p>The final value is rounded to an integer. All intermediate calculations use floating point, except the non-piercing overflow term (Step 4) which is truncated to integer before adding.</p>
+
+<h2>Head and Body Targeting</h2>
+<p>Each hit targets either the head (HeadshotChance, default 25%) or the body. Headshots hit the helmet armor pool. Body hits hit body armor. Both pools degrade independently over multiple hits.</p>
+<p>Headshots add +50% to HP damage. Some traits and skills add additional headshot damage (see AddedHeadshotDamagePerc above).</p>
+
+<h2>Defender Perks</h2>
+
+<h3>Battle Forged</h3>
+<p>Reduces armor damage based on current total armor (body + head combined):</p>
+<pre>
+DamageArmorReceivedPerc *= max(0.0, 1.0 - TotalArmor * 0.0005)
+
+Example: 230 body + 190 head = 420 total
+  1.0 - 420 * 0.0005 = 0.79 (21% armor damage reduction)
+</pre>
+<p>Recalculated every hit as armor degrades. More armor remaining means more protection.</p>
+
+<h3>Nimble</h3>
+<p>Reduces HP damage based on armor weight (fatigue penalty from equipped armor). Light armor gives up to 60% HP damage reduction. Heavy armor gives almost no reduction.</p>
+<pre>
+DamageRegularReceivedPerc *= NimbleMult
+
+NimbleMult varies per enemy based on their armor's fatigue penalty.
+Typical values: 0.40 (light armor) to 1.0 (heavy armor, no benefit).
+</pre>
+
+<h3>Steel Brow</h3>
+<p>Removes the +50% headshot HP damage bonus by setting AddedHeadshotDamagePerc to -0.50, which cancels the +0.50 from the headshot. Also cancels Chop's +50% bonus. Headshots still target the helmet.</p>
+
+<h3>Nine Lives</h3>
+<p>The first hit that would reduce HP to 0 or below instead sets HP to a random value between 11 and 15. Triggers once per fight. Clears all bleed stacks when triggered.</p>
+
+<h3>Resilient</h3>
+<p>Halves bleed duration from 2 turns to 1 turn. Prevents bleed stacks from overlapping.</p>
+
+<h2>Injury</h2>
+<p>An injury occurs when a single hit deals HP damage greater than or equal to 25% of the enemy's max HP:</p>
+<pre>
+InjuryThreshold = 0.25 * MaxHP
+
+Head injuries have a higher threshold:
+  HeadInjuryThreshold = 0.25 * MaxHP * 1.25
+
+With Crippling Strikes (attacker perk):
+  InjuryThreshold *= 0.66 (34% lower threshold)
+</pre>
+<p>Each sub-hit in multi-hit attacks (like Cascade) checks independently. Undead, beasts, and some other enemies are immune to injuries.</p>
+
+<h2>Morale Check</h2>
+<p>A morale check is triggered when a single hit deals at least 15 HP damage. The enemy then rolls against their Resolve. Failure drops morale by one level.</p>
+<p>With the Fearsome perk, the threshold drops to 1 HP damage, triggering morale checks on almost every hit that penetrates armor.</p>
+<p>Undead and constructs are immune to morale.</p>
+
+<h2>Bleeding</h2>
+<p>Cleave and Whip skills apply a bleed effect when the hit deals at least 6 HP damage.</p>
+<pre>
+BleedPerTurn = 5 (base) or 10 (with Weapon Mastery)
+BleedDuration = 2 turns (1 turn with Resilient)
+</pre>
+<p>Bleed is a stacking effect. Each qualifying hit adds a new stack with its own timer. Stacks tick on the enemy's turn:</p>
+<pre>
+Hit 1: apply bleed (2 turns remaining)
+Enemy turn: 1 stack ticks, 1 turn left
+Hit 2: apply new bleed (2 turns). Old bleed has 1 turn left.
+Enemy turn: 2 stacks tick simultaneously
+Hit 3: apply new bleed. Oldest stack expires.
+Enemy turn: 2 stacks tick (steady state with 2-turn bleeds)
+</pre>
+<p>Resilient halves duration to 1 turn, so old stacks expire before new ones are added (no overlap).</p>
+<p>Nine Lives clears all bleed stacks. Undead, Alps, and Schrats are immune to bleeding.</p>
+
+<h2>Racial Resistances</h2>
+<p>Certain enemy groups take reduced damage from specific weapon skills. The resistance is applied as a multiplier to DamageRegularReceivedPerc for that skill.</p>
+
+<h3>Alps: Existing Partly in Dreams</h3>
+<p>Resistant to ranged weapons and piercing melee attacks:</p>
+<pre>
+Bows:           10% damage
+Javelins:       25% damage
+Crossbows:      33% damage
+Slings:         33% damage
+Dog Bites:      33% damage
+Other piercing: 50% damage
+Handgonnes:     50% damage
+</pre>
+
+<h3>Ancient Dead: Resistant to Ranged Attacks</h3>
+<pre>
+Bows:           10% damage
+Javelins:       25% damage
+Fire Lance:     25% damage
+Crossbows:      33% damage
+Slings:         33% damage
+Handgonnes:     33% damage
+Other piercing: 50% damage
+</pre>
+
+<h3>Ifrits: Sand Golem</h3>
+<pre>
+Bows:           10% damage
+Fire Lance:     10% damage
+Crossbows:      33% damage
+Slings:         33% damage
+Javelins:       25% damage
+Handgonnes:     25% damage
+Other piercing: 50% damage
+</pre>
+
+<h3>Schrats and Serpents</h3>
+<p>Both have resistances to ranged attacks but are not resistant to piercing melee. Specific values vary per skill. Schrats also reduce all incoming damage to 30% while their root shield is up (not modeled in our calculator).</p>
+
+<h2>Enemy Armor Loadouts</h2>
+<p>Enemies with variable equipment have multiple possible body armor and helmet combinations, each with a spawn probability. Each simulation run randomly picks one combination weighted by probability.</p>
+<p>For example, a Brigand Raider has 4 body armor options and 6 helmet options, resulting in 24 different possible loadouts.</p>
+
+<h2>Special Enemy Abilities</h2>
+
+<h3>Barbarian Madman: HP Regeneration</h3>
+<pre>
+HealPerTurn = floor(MaxHP * 0.06)
+
+For 160 HP Madman: floor(160 * 0.06) = 9 HP per turn
+</pre>
+<p>Heals on the enemy's turn, after bleed ticks. If an attack kills the Madman outright (HP <= 0 from the hit), he dies before bleed or heal apply. Otherwise: bleed ticks first, then heal (capped at max HP), then check if dead.</p>
+
+<h3>Fallen Betrayer: Armor Damage Reduction</h3>
+<pre>
+DamageArmorReceivedPerc *= 0.75
+</pre>
+<p>Armor takes 25% less damage, making it degrade slower.</p>
+
+<h2>Skill-Specific Mechanics</h2>
+
+<h3>Destroy Armor</h3>
+<pre>
+DamageRegularPerc = 0.0 (no HP damage from formula)
+DamageArmorPerc *= 1.50 (base) or 2.00 (mastery)
+HitpointDamageMinimum = 10
+</pre>
+
+<h3>Demolish Armor</h3>
+<pre>
+DamageRegularPerc = 0.0
+DamageArmorPerc *= 1.45 (base) or 1.93 (mastery)
+HitpointDamageMinimum = 10
+</pre>
+
+<h3>Split Man (Two-Handed Axe)</h3>
+<p>Two hits per attack. Primary hit on the targeted body part at full damage. Secondary hit on the opposite body part at 50% damage (DamageTotalPerc *= 0.5). No headshot bonus on the secondary hit.</p>
+
+<h3>Cascade (Three-Headed Flail)</h3>
+<p>3 separate hits at 1/3 damage each (DamageRegularPerc = 0.33). Each hit independently rolls head or body targeting. Each independently checks for injury and morale triggers.</p>
+
+<h3>Hail (Three-Headed Flail)</h3>
+<p>Same as Cascade but always targets the head.</p>
+
+<h3>Decapitate</h3>
+<pre>
+DamageRegularPerc += (1.0 - CurrentHP / MaxHP)
+</pre>
+<p>Only scales HP damage, not armor damage.</p>
+
+<h3>Puncture (Dagger)</h3>
+<pre>
+PiercingPerc = 1.0 (bypasses armor entirely)
+AddedHeadshotDamagePerc = -0.5 (cancels headshot bonus)
+</pre>
+
+<h3>Pound (Flail)</h3>
+<pre>
+PiercingPerc += 0.10 on headshots (base)
+PiercingPerc += 0.20 on headshots (mastery)
+</pre>
+
+<h3>Chop (One-Handed Axe)</h3>
+<pre>
+AddedHeadshotDamagePerc += 0.50 on headshots
+</pre>
+
+<h3>Lash (Flail)</h3>
+<p>Always targets the head (100% headshot chance).</p>
+
+<h3>Cleave / Whip</h3>
+<p>Applies bleed (see Bleeding section). Base: 5 per turn. Mastery: 10 per turn.</p>
+
+<h2>Implementation Note</h2>
+<p>In Battle Brothers, a skill's PiercingPerc replaces the weapon's value entirely. In our calculator, we compute it as a delta: <code>FinalPiercing = WeaponBasePiercing + (SkillPiercing - WeaponBasePiercing)</code>. The end result is identical for standard weapons. The delta approach has the advantage that when a user enters custom stats for a Named weapon, the skill's relative contribution is preserved correctly.</p>
+
+</div>
+
+<p class="page-about">Built by Pascal Klein (<a href="https://bloodngold.com/">HeyPashi</a>)</p>
+{% endblock %}

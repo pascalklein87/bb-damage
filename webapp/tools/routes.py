@@ -8,7 +8,7 @@ from engine.data import (WEAPONS, ENEMIES, ARMOR_LOADOUTS,
                          ENEMY_RESISTANCES, SKILLS,
                          SKILL_ID_TO_NAME, ATTACKER_BUFFS)
 
-tools_bp = Blueprint('tools', __name__, url_prefix='/damage-calculator')
+tools_bp = Blueprint('tools', __name__)
 
 
 def _to_slug(s):
@@ -200,7 +200,7 @@ def _calc_input_error(message):
     return render_template('tools/calc_error.html', message=message), 400
 
 
-@tools_bp.route('', strict_slashes=False)
+@tools_bp.route('/')
 def damage_calculator():
     calc_weapons = expand_calculator_skills(WEAPONS)
     calc_weapons = tag_weapon_names(calc_weapons)

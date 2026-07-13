@@ -1,4 +1,4 @@
 User-agent: *
-Disallow: /damage-calculator?
+Disallow: /?
 
-Sitemap: https://bloodngold.com/sitemap.xml
+Sitemap: https://damage.bloodngold.com/sitemap.xml
