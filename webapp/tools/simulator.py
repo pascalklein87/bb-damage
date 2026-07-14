@@ -95,7 +95,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
     )
 
     bleed_per_turn       = calc_params['bleed_per_turn']
-    always_headshot      = calc_params['always_headshot']
+    force_body_part      = calc_params['force_body_part']
     no_headshot_bonus    = calc_params['no_headshot_bonus']
     added_headshot_bonus = calc_params['added_headshot_bonus']
     headshot_ap_add      = calc_params['headshot_ap_add']
@@ -137,7 +137,14 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
 
     loadout_table = _build_loadout_table(armor_loadouts)
 
-    head_chance_perc = 100 if always_headshot else int(headshot_chance * 100)
+    # BB head/body forcing (bb_data force_body_part): 'body' never headshots
+    # (Puncture), 'head' always headshots (Lash, Hail), 'none' rolls normally.
+    if force_body_part == 'body':
+        head_chance_perc = 0
+    elif force_body_part == 'head':
+        head_chance_perc = 100
+    else:
+        head_chance_perc = int(headshot_chance * 100)
 
     damage_min = attacker['damage_min']
     damage_max = attacker['damage_max']
@@ -394,8 +401,15 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
     # Deterministic peak iterates the same multi-hit loop with max
     # rolls and primary forced to body or head. Per-sub-hit damages
     # accumulate; pick the higher of the two cases.
+    # Only consider the body parts the skill can actually hit.
+    if force_body_part == 'body':
+        peak_cases = [(False, 'body')]
+    elif force_body_part == 'head':
+        peak_cases = [(True, 'head')]
+    else:
+        peak_cases = [(False, 'body'), (True, 'head')]
     peak_results = {}
-    for is_head, label in [(False, 'body'), (True, 'head')]:
+    for is_head, label in peak_cases:
         peak_head_chance = 100 if is_head else 0
         peak_body_armor = int(min_body_armor)
         peak_head_armor = int(min_head_armor)
@@ -471,10 +485,8 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
             'armor_damage_dealt': peak_total_armor,
         }
 
-    peak_hp = max(peak_results['body']['hp_removed'],
-                  peak_results['head']['hp_removed'])
-    peak_armor = max(peak_results['body']['armor_damage_dealt'],
-                     peak_results['head']['armor_damage_dealt'])
+    peak_hp = max(v['hp_removed'] for v in peak_results.values())
+    peak_armor = max(v['armor_damage_dealt'] for v in peak_results.values())
 
     damage_stats = {}
     if damage_stats_runs:

@@ -18,13 +18,24 @@ Split out of the old `bb-wiki` monolith on 2026-07-13.
 
 ## Database: `bb_damage`
 
-Its own DB. Holds `cache` (calculator results) plus a self-contained copy of
-the BB reference tables the calculator reads: `weapon`, `weapon_skill`,
-`weapon_skill_map`, `enemy`, `enemy_armor_loadout`, `enemy_perk`,
-`enemy_skill_resistance`, `attacker_buff`.
+Weapon stats, skill mechanics, and weapon->skill connections are READ FROM the
+shared `bb_data` (`item_weapon`, `weapon_skill`, `weapon_skill_connection`) via
+cross-database joins - single source of truth, no copy. Only DAMAGE skills
+(`bb_data.weapon_skill.damage_perc > 0`) are listed; head/body forcing comes
+from `bb_data.weapon_skill.force_body_part` (Puncture -> body, Lash/Hail -> head).
 
-TODO: read the reference tables from the shared `bb_data` instead of this copy
-(single source of truth), leaving `bb_damage` holding only `cache`.
+`bb_damage` holds only what `bb_data` does not carry:
+
+- `weapon` (`id, name, unique_slug`) - the curated calculator weapons plus their
+  display name/slug (`bb_data.item_weapon` has no name).
+- `weapon_skill_display` (`name, is_mastery, label, damage_calculator_tooltip,
+  show_in_calculator`) - calculator hover text, plus the curated set of
+  masteries that change the calc's output (a mastery shows only when flagged;
+  the flag is the old wiki curation, verified against bb_data's damage columns).
+  `show_in_calculator=0` also excludes Split Shield (damages shields, not the enemy).
+- `enemy`, `enemy_armor_loadout`, `enemy_perk`, `enemy_skill_resistance`
+  (keyed by skill slug), `attacker_buff` - no `bb_data` equivalent.
+- `cache` - calculator results.
 
 ## Local
 

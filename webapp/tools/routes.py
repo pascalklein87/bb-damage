@@ -5,8 +5,8 @@ from bb_engine import nimble_multiplier
 from engine.cache import get_cached, set_cached
 from .simulator import simulate_hits_to_kill
 from engine.data import (WEAPONS, ENEMIES, ARMOR_LOADOUTS,
-                         ENEMY_RESISTANCES, SKILLS,
-                         SKILL_ID_TO_NAME, ATTACKER_BUFFS)
+                         ENEMY_RESISTANCES,
+                         SKILL_SLUG_TO_NAME, ATTACKER_BUFFS)
 
 tools_bp = Blueprint('tools', __name__)
 
@@ -59,13 +59,14 @@ SKILL_CALC_PARAMS = {
     'puncture':               {'no_headshot_bonus': True},
     'puncture-mastery':       {'no_headshot_bonus': True},
     'chop':                   {'added_headshot_bonus': 0.50},
-    'lash':                   {'always_headshot': True},
-    'lash-mastery':           {'always_headshot': True},
     'cascade':                {'strategy': 'triple'},
-    'hail':                   {'strategy': 'triple', 'always_headshot': True},
-    'hail-mastery':           {'strategy': 'triple', 'always_headshot': True},
+    'hail':                   {'strategy': 'triple'},
+    'hail-mastery':           {'strategy': 'triple'},
     'split-man':              {'strategy': 'split_man'},
 }
+# Head/body forcing (Puncture -> body, Lash/Hail -> head) is not listed here:
+# it comes from bb_data.weapon_skill.force_body_part via the skill's
+# 'force_body_part' field, applied in expand_calculator_skills below.
 
 
 
@@ -82,7 +83,7 @@ THROW_SLUGS = frozenset([
 DEFAULT_CALC_PARAMS = {
     'strategy':             'single',
     'bleed_per_turn':       0,
-    'always_headshot':      False,
+    'force_body_part':      'none',
     'no_headshot_bonus':    False,
     'added_headshot_bonus': 0,
     'headshot_ap_add':      0,
@@ -108,6 +109,9 @@ def expand_calculator_skills(weapons):
             # SKILL_CALC_PARAMS entry didn't override it.
             if skill['bleed_per_turn'] > 0 and params['bleed_per_turn'] == 0:
                 params['bleed_per_turn'] = skill['bleed_per_turn']
+            # Head/body forcing comes straight from bb_data (Puncture -> body,
+            # Lash/Hail -> head, everything else -> normal roll).
+            params['force_body_part'] = skill['force_body_part']
 
             s = dict(skill)
             s['calc_params'] = params
@@ -159,7 +163,7 @@ def _enrich_enemies(enemies):
         res_list = []
         if enemy_res:
             for sid, mult in sorted(enemy_res.items(), key=lambda x: x[1]):
-                sname = SKILL_ID_TO_NAME.get(sid, sid)
+                sname = SKILL_SLUG_TO_NAME.get(sid, sid)
                 res_list.append({'skill': sname, 'percent': int(round(mult * 100))})
         result.append(dict(e,
                            racial_resistances=res_list,
@@ -480,11 +484,9 @@ def damage_calculator():
         calc_params['bleed_per_turn'] = 0
 
     # Skill-to-enemy resistance lookup
-    skill_resistance = 1.0
-    if skill and enemy:
-        skill_id = skill.get('id', '')
-        enemy_res = ENEMY_RESISTANCES[enemy['id']]
-        skill_resistance = enemy_res.get(skill_id, 1.0)
+    # Racial resistance is keyed by skill slug; most skills have none (1.0).
+    enemy_res = ENEMY_RESISTANCES[enemy['id']]
+    skill_resistance = enemy_res.get(skill['slug'], 1.0)
 
     # Check cache
     cached = get_cached(cache_url)
@@ -532,7 +534,7 @@ def damage_calculator():
     if enemy_res:
         for sid, mult in sorted(enemy_res.items(),
                                 key=lambda x: x[1]):
-            sname = SKILL_ID_TO_NAME.get(sid, sid)
+            sname = SKILL_SLUG_TO_NAME.get(sid, sid)
             racial_resistances.append({
                 'skill': sname,
                 'mult': mult,
