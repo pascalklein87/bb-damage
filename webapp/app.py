@@ -75,4 +75,7 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True, port=5002)
+    # Local dev port. 5005 (not 5002) so it never collides with bng-game,
+    # which runs on 5002. Prod is unaffected: gunicorn serves create_app()
+    # on 8002 (see deploy.sh), never this app.run().
+    app.run(debug=True, port=5005)

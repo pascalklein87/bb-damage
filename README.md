@@ -39,7 +39,7 @@ from `bb_data.weapon_skill.force_body_part` (Puncture -> body, Lash/Hail -> head
 
 ## Local
 
-    cd webapp && python app.py      # http://127.0.0.1:5002/
+    cd webapp && python app.py      # http://127.0.0.1:5005/
 
 ## Deploy
 
