@@ -1,3 +1,4 @@
+import os
 import pathlib
 import time
 
@@ -27,6 +28,13 @@ def create_app():
     @app.context_processor
     def inject_cache_bust():
         return {'cache_bust': int(time.time())}
+
+    @app.context_processor
+    def inject_tabs_js_url():
+        # Cross-site vertical tab bar, hosted once at bloodngold.com/static/tabs.js.
+        # Local dev overrides TABS_JS_URL to the local bng-home dev server.
+        return {'tabs_js_url': os.environ.get(
+            'TABS_JS_URL', 'https://bloodngold.com/static/tabs.js')}
 
     # Calculator at / and the cache view at /cache (tools_bp has no url_prefix).
     from tools.routes import tools_bp

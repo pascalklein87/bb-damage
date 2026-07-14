@@ -358,3 +358,10 @@ AddedHeadshotDamagePerc += 0.50 on headshots
 
 <p class="page-about">Built by Pascal Klein (<a href="https://bloodngold.com/">HeyPashi</a>)</p>
 {% endblock %}
+
+{% block scripts %}
+{# Cross-site vertical tab bar. The spec is a Damage entry page, so it declares
+   itself the 'damage' tab (renders selected). Hosted once on bloodngold.com. #}
+<script>window.BNG_TAB = 'damage';</script>
+<script defer src="{{ tabs_js_url }}?v={{ cache_bust }}"></script>
+{% endblock %}

@@ -531,4 +531,8 @@
      preview - no copied formula. Loaded BEFORE calculator.js, which calls it. -->
 <script src="/bb-engine/attack.js?v={{ cache_bust }}"></script>
 <script src="{{ url_for('static', filename='calculator.js') }}?v={{ cache_bust }}"></script>
+{# Cross-site vertical tab bar. This is the Damage entry page, so it declares
+   itself the 'damage' tab (renders selected). Hosted once on bloodngold.com. #}
+<script>window.BNG_TAB = 'damage';</script>
+<script defer src="{{ tabs_js_url }}?v={{ cache_bust }}"></script>
 {% endblock %}
