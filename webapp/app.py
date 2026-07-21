@@ -5,19 +5,19 @@ import time
 from flask import Flask, redirect, request, render_template, send_from_directory
 
 
-# Sibling bb-engine repo's browser JS (its nimbleMultiplier is the ONE JavaScript
-# home for the Nimble formula), served at /bb-engine/<path> so the damage
+# Sibling bb-damage-engine repo's browser JS (its nimbleMultiplier is the ONE JavaScript
+# home for the Nimble formula), served at /bb-damage-engine/<path> so the damage
 # calculator reuses it instead of a copied formula. Located depth-robustly:
-# bb-engine sits beside this workspace (bloodngold-projects/ locally, /var/www/
+# bb-damage-engine sits beside this workspace (bloodngold-projects/ locally, /var/www/
 # on the box).
-def _bb_engine_js_dir():
+def _bb_damage_engine_js_dir():
     for anc in pathlib.Path(__file__).resolve().parents:
-        if (anc / "bb-engine" / "js").is_dir():
-            return anc / "bb-engine" / "js"
-    raise RuntimeError("bb-engine/js sibling not found above " + __file__)
+        if (anc / "bb-damage-engine" / "js").is_dir():
+            return anc / "bb-damage-engine" / "js"
+    raise RuntimeError("bb-damage-engine/js sibling not found above " + __file__)
 
 
-_BB_ENGINE_JS = _bb_engine_js_dir()
+_BB_DAMAGE_ENGINE_JS = _bb_damage_engine_js_dir()
 
 
 def create_app():
@@ -40,11 +40,11 @@ def create_app():
     from tools.routes import tools_bp
     app.register_blueprint(tools_bp)
 
-    @app.route('/bb-engine/<path:path>')
-    def bb_engine_js(path):
-        """Serve bb-engine's browser JS (attack.js) from the sibling repo so the
-        damage calculator reuses bb-engine's ONE nimbleMultiplier."""
-        return send_from_directory(_BB_ENGINE_JS, path)
+    @app.route('/bb-damage-engine/<path:path>')
+    def bb_damage_engine_js(path):
+        """Serve bb-damage-engine's browser JS (attack.js) from the sibling repo so the
+        damage calculator reuses bb-damage-engine's ONE nimbleMultiplier."""
+        return send_from_directory(_BB_DAMAGE_ENGINE_JS, path)
 
     @app.route('/spec')
     def spec():

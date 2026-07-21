@@ -526,10 +526,10 @@
 {% if results %}
 <script id="histogram-data" type="application/json">{{ {"kill": results.hits_to_kill.distribution, "injury": results.hits_to_kill.injury_distribution, "resolve": results.hits_to_kill.resolve_distribution, "fearsome": results.hits_to_kill.fearsome_distribution, "injury_immune": results.injury_immune, "morale_immune": results.morale_immune} | tojson }}</script>
 {% endif %}
-<!-- bb-engine's ONE JavaScript nimbleMultiplier, served from the sibling repo
-     (app.py /bb-engine/<path>). calculator.js reuses it for the live Nimble %
+<!-- bb-damage-engine's ONE JavaScript nimbleMultiplier, served from the sibling repo
+     (app.py /bb-damage-engine/<path>). calculator.js reuses it for the live Nimble %
      preview - no copied formula. Loaded BEFORE calculator.js, which calls it. -->
-<script src="/bb-engine/attack.js?v={{ cache_bust }}"></script>
+<script src="/bb-damage-engine/attack.js?v={{ cache_bust }}"></script>
 <script src="{{ url_for('static', filename='calculator.js') }}?v={{ cache_bust }}"></script>
 {# Cross-site vertical tab bar. This is the Damage entry page, so it declares
    itself the 'damage' tab (renders selected). Hosted once on bloodngold.com. #}

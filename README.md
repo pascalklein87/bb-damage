@@ -1,9 +1,9 @@
 # bb-damage
 
 The Battle Brothers damage calculator at **damage.bloodngold.com**. Flask +
-MySQL. Reuses the sibling `bb-engine` package for the damage math (its
+MySQL. Reuses the sibling `bb-damage-engine` package for the damage math (its
 `nimble_multiplier` is the one Python home for the Nimble formula) and serves
-bb-engine's browser JS at `/bb-engine/<path>`.
+bb-damage-engine's browser JS at `/bb-damage-engine/<path>`.
 
 ## Routes
 
@@ -11,7 +11,7 @@ bb-engine's browser JS at `/bb-engine/<path>`.
   parameterized URLs carry `noindex,follow` and canonical to bare `/`.
 - `/spec` - the plain-English damage calculation spec
 - `/cache` - simulation result cache view
-- `/bb-engine/<path>` - bb-engine's browser JS
+- `/bb-damage-engine/<path>` - bb-damage-engine's browser JS
 - legacy 301s: `/damage-calculator*` and `/calculator` -> `/`
 
 ## Database: `bb_damage`
@@ -40,6 +40,6 @@ cd webapp && python app.py                          # http://127.0.0.1:5005/
 ssh root@46.225.141.38 "bash /var/www/bb-damage/deploy.sh"
 ```
 
-gunicorn on `127.0.0.1:8002`. The deploy force-reinstalls `bb-engine` from main
+gunicorn on `127.0.0.1:8002`. The deploy force-reinstalls `bb-damage-engine` from main
 every time, because pip skips an already-installed git dependency while its
 version stays `0.1.0`. Repo: github.com/pascalklein87/bb-damage (public).

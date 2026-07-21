@@ -1,7 +1,7 @@
 import re
 
 from flask import Blueprint, render_template, request
-from bb_engine import nimble_multiplier
+from bb_damage_engine import nimble_multiplier
 from engine.cache import get_cached, set_cached
 from .simulator import simulate_hits_to_kill
 from engine.data import (WEAPONS, ENEMIES, ARMOR_LOADOUTS,
@@ -17,7 +17,7 @@ def _to_slug(s):
 
 # Modifier metadata: URL slug -> { checkbox: DOM input id, name: BB
 # trait/perk name the engine recognises }. The numeric effect of each
-# name lives in bb-engine (bb_engine.attack.build_attacker), not here.
+# name lives in bb-damage-engine (bb_damage_engine.attack.build_attacker), not here.
 MODIFIERS = {
     'double-grip':       {'checkbox': 'trait-double-grip',       'name': 'Double Grip'},
     'drunkard':          {'checkbox': 'trait-drunkard',          'name': 'Drunkard'},
@@ -239,8 +239,8 @@ def damage_calculator():
             cb_armor_fatigue = int(request.args.get('cb_fat', 0))
         except ValueError:
             return _calc_input_error("cb_fat must be a whole number.")
-        # Nimble damage-received multiplier - bb-engine's ONE Python home
-        # (bb_engine.nimble_multiplier; BB perk_nimble.nut:69-70). No copied formula.
+        # Nimble damage-received multiplier - bb-damage-engine's ONE Python home
+        # (bb_damage_engine.nimble_multiplier; BB perk_nimble.nut:69-70). No copied formula.
         cb_nimble_mult = nimble_multiplier(cb_armor_fatigue)
 
         cb_perk_names = []

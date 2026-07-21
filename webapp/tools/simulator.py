@@ -1,8 +1,8 @@
 """
 Hits-to-kill Monte Carlo simulator. Wiki-side aggregation that wraps
-single-hit calls to bb-engine's attack module.
+single-hit calls to bb-damage-engine's attack module.
 
-Lives here (not in bb-engine) because:
+Lives here (not in bb-damage-engine) because:
   - The Monte Carlo loop, distribution buckets, kill-type tracking,
     peak first-hit calculation, and armor-loadout sampling are
     wiki-shaped concerns; the JS engine port has no counterpart.
@@ -11,7 +11,7 @@ Lives here (not in bb-engine) because:
     not the engine.
   - Single caller: webapp/tools/routes.py.
 
-Multi-hit shape (per bb-engine/docs/multi_hit_caller.md):
+Multi-hit shape (per bb-damage-engine/docs/multi_hit_caller.md):
   strategy='triple'    → Cascade / Hail: 3 sub-hits at 1/3 damage,
                          each rolls body part independently.
   strategy='split_man' → primary at 1.0× + secondary at 0.5× on
@@ -26,7 +26,7 @@ import math
 import random
 from collections import Counter
 
-from bb_engine import Defender, execute_attack, build_attacker
+from bb_damage_engine import Defender, execute_attack, build_attacker
 
 
 def _build_loadout_table(armor_loadouts):
@@ -198,7 +198,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                 break
 
             # Multi-hit attack: 1 / 2 / 3 sub-hits per BB skill identity.
-            # See bb-engine/docs/multi_hit_caller.md.
+            # See bb-damage-engine/docs/multi_hit_caller.md.
             sub_count = sub_count_for_strategy
             primary_body_part = None
             attack_hp_dmg = 0

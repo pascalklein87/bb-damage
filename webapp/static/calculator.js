@@ -351,9 +351,9 @@ $(function() {
 
     $('#enemy-select').on('change', applyEnemy);
 
-    // Custom brother: nimble mult from armor fatigue - bb-engine's ONE
-    // JavaScript home (bbEngineAttack.nimbleMultiplier, loaded from the bb-engine
-    // repo at /bb-engine/attack.js). No copied formula here.
+    // Custom brother: nimble mult from armor fatigue - bb-damage-engine's ONE
+    // JavaScript home (bbEngineAttack.nimbleMultiplier, loaded from the bb-damage-engine
+    // repo at /bb-damage-engine/attack.js). No copied formula here.
     function updateNimblePct() {
         var fat = parseInt($('#cb-armor-fatigue').val()) || 0;
         var mult = window.bbEngineAttack.nimbleMultiplier(fat);
