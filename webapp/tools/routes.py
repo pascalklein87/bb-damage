@@ -358,13 +358,21 @@ def damage_calculator():
     calc_params              = skill['calc_params']
     skill_name               = skill['name']
 
-    # Build the BB-engine modifier-name list. Skip 1H-only mods for
-    # 2H and throwing weapons; engine handles all numeric values.
+    # Build the BB-engine modifier-name list; engine handles all numeric
+    # values. Double Grip is 1H-melee-only (double_grip.nut MeleeDamageMult,
+    # needs a grippable weapon) so it is skipped for 2H and throwing weapons.
+    # Duelist adds armor-ignoring damage whenever the offhand slot is free,
+    # which throwing weapons leave open - perk_duelist.nut:20-24 gates only on
+    # the offhand, and BB flags exactly the offhand-blocking weapons as
+    # two-handed. So Duelist is skipped for 2H only: slings are two-handed
+    # (staff_sling.nut BlockedSlotType=Offhand), javelins/axes/spears are not.
     is_two_handed = weapon['two_handed']
     is_thrown = weapon['mastery'] == 'throwing'
     modifier_names = []
     for mod in active_mods:
-        if (is_two_handed or is_thrown) and mod in ('double-grip', 'duelist'):
+        if (is_two_handed or is_thrown) and mod == 'double-grip':
+            continue
+        if is_two_handed and mod == 'duelist':
             continue
         if skill_name == 'Puncture' and mod == 'double-grip':
             continue
