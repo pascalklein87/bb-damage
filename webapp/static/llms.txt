@@ -1,0 +1,9 @@
+# Battle Brothers Damage Calculator
+
+> Calculate hits to kill for any weapon, skill, and enemy in Battle Brothers.
+
+The damage calculator simulates Battle Brothers attacks across enemy armor loadouts and reports the hits and Action Points needed to kill. Weapons, enemies, skills, and perks are chosen from presets. Not affiliated with or endorsed by Overhype Studios.
+
+## Pages
+- https://damage.bloodngold.com/: the damage calculator.
+- https://damage.bloodngold.com/spec: specification of the Battle Brothers damage formula (armor, piercing, headshots, perks, bleeding, injuries, morale).
