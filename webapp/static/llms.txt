@@ -1,9 +1,11 @@
 # Battle Brothers Damage Calculator
 
-> Calculate hits to kill for any weapon, skill, and enemy in Battle Brothers.
+> Calculate how many hits it takes to kill any Battle Brothers enemy with any weapon, skill, and perk setup.
 
-The damage calculator simulates Battle Brothers attacks across enemy armor loadouts and reports the hits and Action Points needed to kill. Weapons, enemies, skills, and perks are chosen from presets. Not affiliated with or endorsed by Overhype Studios.
+The damage calculator runs a Monte Carlo simulation (20,000+ attacks per scenario) of Battle Brothers combat and reports the average hits to kill, hits to injure, and hits to trigger a morale check (with a Fearsome variant), each shown as a distribution. Pick a weapon and an enemy from presets, or build a Custom Brother with your own attributes, then combine skills, perks, and buffs. Enemies with variable equipment are simulated across their possible armor loadouts, each run weighted by spawn chance. Defensive perks (Battle Forged, Nimble, Steel Brow, Nine Lives, Resilient, Indomitable) and racial traits, resistances, and immunities are modelled. Free and runs in the browser.
+
+Not affiliated with or endorsed by Overhype Studios.
 
 ## Pages
 - https://damage.bloodngold.com/: the damage calculator.
-- https://damage.bloodngold.com/spec: specification of the Battle Brothers damage formula (armor, piercing, headshots, perks, bleeding, injuries, morale).
+- https://damage.bloodngold.com/spec: full specification of the Battle Brothers damage formula - armor, piercing, headshots, perks, bleeding, injuries, morale checks, Nimble, and racial resistances.
