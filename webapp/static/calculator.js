@@ -509,7 +509,6 @@ $(function() {
         if (scaling !== 'none') updateInitiativeMult();
         var condition = skill === null ? 'none' : skill.calc_params.condition;
         $('#condition-row').toggle(condition !== 'none');
-        $('#condition-injured').toggle(condition === 'injured');
         $('#condition-staggered').toggle(condition === 'staggered');
     }
 
@@ -534,9 +533,6 @@ $(function() {
         if (skill) parts.push('skill=' + skill.slug);
         if (skill && skill.calc_params.initiative_scaling !== 'none') {
             parts.push('init=' + $('#attacker-initiative').val());
-        }
-        if (skill && skill.calc_params.condition === 'injured' && $('#enemy-injured').is(':checked')) {
-            parts.push('injured=1');
         }
         if (skill && skill.calc_params.condition === 'staggered' && $('#enemy-staggered').is(':checked')) {
             parts.push('staggered=1');

@@ -5,6 +5,7 @@ Reference data is READ FROM bb_data, the canonical BB extraction:
   - bb_data.item_weapon             weapon stats
   - bb_data.weapon_skill            skill mechanics (base + mastery via mastery_class)
   - bb_data.weapon_skill_connection which skills each weapon has, in order
+  - bb_data.injury                  the battle injury pools (category x body part)
 
 This app's own bb_damage DB keeps only what bb_data does not carry:
   - weapon(id, name, unique_slug)          the curated calculator weapons + display name/slug
@@ -59,6 +60,19 @@ def _skill_dict(r, display):
     slug = _slug(r['skill_name']) + ('-mastery' if is_mastery else '')
     d = display.get((r['skill_name'], 1 if is_mastery else 0))
     label, tooltip = (d['label'], d['tooltip']) if d else ('', '')
+    # Which bb_data.injury pool a hit of this skill rolls from.
+    if r['injury_category'] is not None:
+        injury_category = r['injury_category']
+    elif r['target'] == 'self':
+        # A stance counter-attacks with the weapon's attack of opportunity
+        # (Riposte: actor.nut:1442-1455 getAttackOfOpportunity), so its hits
+        # injure with the default attack's list.
+        injury_category = r['default_attack_injury_category']
+    else:
+        # No injury list (Destroy / Demolish Armor: skill.nut:40-41 default
+        # null, never set by the skill): the hit cannot injure
+        # (actor.nut:1679 `_hitInfo.Injuries != null`).
+        injury_category = None
     return {
         'id': r['skill_id'],
         'name': name,
@@ -81,6 +95,7 @@ def _skill_dict(r, display):
         # BB head/body forcing: 'body' = never headshots (Puncture),
         # 'head' = always headshots (Lash, Hail), 'none' = normal roll.
         'force_body_part': r['force_body_part'],
+        'injury_category': injury_category,
         'is_mastery': is_mastery,
     }
 
@@ -116,9 +131,13 @@ def load_weapons():
                (s.mastery_class IS NOT NULL) AS is_mastery,
                s.action_cost, s.fatigue_base_cost, s.range_min, s.range_max,
                s.piercing_perc_bonus, s.damage_perc, s.damage_bonus,
-               s.bleed_per_turn, s.damage_scales_with_missing_hp, s.force_body_part
+               s.bleed_per_turn, s.damage_scales_with_missing_hp, s.force_body_part,
+               s.injury_category, s.target,
+               da.injury_category AS default_attack_injury_category
         FROM bb_data.weapon_skill_connection c
         JOIN bb_data.weapon_skill s ON s.id = c.weapon_skill_id
+        JOIN bb_data.item_weapon iw ON iw.id = c.weapon_id
+        JOIN bb_data.weapon_skill da ON da.id = iw.default_attack_skill_base_id
         WHERE c.weapon_id IN (SELECT id FROM weapon) AND s.damage_perc > 0
         ORDER BY c.weapon_id, c.sort_order, (s.mastery_class IS NOT NULL)
     """)
@@ -248,6 +267,28 @@ def load_attacker_buffs():
              'stat': r['stat'], 'value': r['value']} for r in rows]
 
 
+def load_injury_pools():
+    """{(category, body_part): [{'id', 'name', 'threshold'}, ...]} from
+    bb_data.injury: the battle injuries BB picks from after a hit
+    (actor.nut:1684-1704; pools in config/character_injuries.nut). threshold
+    is the fraction of max hitpoints a hit must remove (BB inj.Threshold).
+    Pre-battle injuries are not hit-inflicted and stay out."""
+    rows = _query("""
+        SELECT id, name, category, body_part, threshold
+        FROM bb_data.injury
+        WHERE category <> 'pre_battle'
+        ORDER BY category, body_part, id
+    """)
+    pools = {}
+    for r in rows:
+        pools.setdefault((r['category'], r['body_part']), []).append({
+            'id': r['id'],
+            'name': r['name'],
+            'threshold': r['threshold'] / 100.0,
+        })
+    return pools
+
+
 # Load on import
 WEAPONS = load_weapons()
 ENEMIES = load_enemies()
@@ -255,6 +296,7 @@ ARMOR_LOADOUTS = load_armor_loadouts()
 ENEMY_PERKS = load_enemy_perks()
 ENEMY_RESISTANCES, SKILL_SLUG_TO_NAME = load_enemy_resistances()
 ATTACKER_BUFFS = load_attacker_buffs()
+INJURY_POOLS = load_injury_pools()
 
 
 # Attach armor ranges and perks to each enemy

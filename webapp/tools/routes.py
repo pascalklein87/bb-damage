@@ -6,7 +6,7 @@ from engine.cache import get_cached, set_cached
 from .simulator import simulate_hits_to_kill
 from engine.data import (WEAPONS, ENEMIES, ARMOR_LOADOUTS,
                          ENEMY_RESISTANCES,
-                         SKILL_SLUG_TO_NAME, ATTACKER_BUFFS)
+                         SKILL_SLUG_TO_NAME, ATTACKER_BUFFS, INJURY_POOLS)
 
 tools_bp = Blueprint('tools', __name__)
 
@@ -72,12 +72,14 @@ SKILL_CALC_PARAMS = {
     'skewer':                 {'initiative_scaling': 'piercing', 'initiative_max': 0.55},
     # Execute: HitChance[Head] += 15 (execute_skill.nut:116).
     'execute':                {'head_chance_add': 15},
+    # Perforate fires 2 thrusts + 1 per injury the target carries when the
+    # use starts (perforate_skill.nut:79-104); the simulator tracks the
+    # target's injuries and adds those thrusts itself.
+    'perforate':              {'strategy': 'repeat', 'sub_hits': 2},
     # Conditional extra sub-hit, toggled by the calculator's checkbox:
-    # Perforate fires 2 thrusts + 1 per injury on the target
-    # (perforate_skill.nut:79-104; the box = one injury). Assault's Impale is
-    # followed by the axe-head Strike when the target is staggered
-    # (assault_skill.nut:113-118; the Strike's modifiers live in simulator.py).
-    'perforate':              {'strategy': 'repeat', 'sub_hits': 2, 'condition': 'injured'},
+    # Assault's Impale is followed by the axe-head Strike when the target is
+    # staggered (assault_skill.nut:113-118; the Strike's modifiers live in
+    # simulator.py). Nothing in a run of Assaults staggers, so it is an input.
     'assault':                {'strategy': 'assault', 'sub_hits': 1, 'condition': 'staggered'},
 }
 
@@ -247,9 +249,8 @@ def damage_calculator():
     active_mods = mods_str.split('_') if mods_str else []
     buff_slug = request.args.get('buff', '')
     champion = request.args.get('champion', '') == '1'
-    # Checkbox states of the conditional sub-hit skills (Perforate / Assault);
-    # read on every request so the template restores them.
-    injured_checked = request.args.get('injured', '') == '1'
+    # Checkbox state of the conditional sub-hit skill (Assault); read on
+    # every request so the template restores it.
     staggered_checked = request.args.get('staggered', '') == '1'
 
     # Find selected items by slug for template pre-selection
@@ -459,13 +460,11 @@ def damage_calculator():
                 f"skill {skill['slug']!r}: unknown initiative_scaling "
                 f"{initiative_scaling!r}")
 
-    # Conditional extra sub-hit (Perforate's injury thrust, Assault's Strike):
-    # a checked box adds one sub-hit to the skill's base count.
+    # Conditional extra sub-hit (Assault's Strike): a checked box adds one
+    # sub-hit to the skill's base count.
     condition = calc_params['condition']
     if condition == 'none':
         condition_met = False
-    elif condition == 'injured':
-        condition_met = injured_checked
     elif condition == 'staggered':
         condition_met = staggered_checked
     else:
@@ -593,6 +592,8 @@ def damage_calculator():
             armor_loadouts=armor_loadouts,
             injury_immune=injury_immune,
             skill_resistance=skill_resistance,
+            injury_category=skill['injury_category'],
+            injury_pools=INJURY_POOLS,
             heal_per_turn=int(enemy['hitpoints'] * enemy['heal_per_turn'] / 100) if enemy['heal_per_turn'] > 0 else 0)
 
         # Strip data for immune enemies before caching
@@ -666,5 +667,4 @@ def damage_calculator():
                            initiative=(initiative if initiative is not None
                                        else INITIATIVE_DEFAULT),
                            initiative_full_bonus_at=INITIATIVE_FULL_BONUS_AT,
-                           injured_checked=injured_checked,
                            staggered_checked=staggered_checked)

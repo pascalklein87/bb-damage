@@ -13,3 +13,9 @@ Open work only. A finished item is deleted.
   (`throw-axe3t`, `throw-axe2t`, ...) are not the `enemy_skill_resistance`
   keys (`throw-axe`), so Serpent / Schrat rows do not apply to them. Key the
   lookup by the base skill slug.
+- `bb_data.injury` keeps one category per injury, but BB lists some head
+  injuries in several pools (Ripped Ear is cutting AND piercing): blunt head
+  BB 4 vs 3 rows, cutting head 6 vs 4, piercing head 5 vs 4; body pools
+  match. The calculator and bng-game both roll head injuries from the
+  smaller pools. Producer fix: a pool junction table in bb_data (schema
+  change, needs approval).

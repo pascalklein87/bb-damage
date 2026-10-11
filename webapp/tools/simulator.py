@@ -16,9 +16,10 @@ Multi-hit shape (per bb-damage-engine/docs/multi_hit_caller.md):
                          each rolls body part independently.
   strategy='split_man' → primary at 1.0× + secondary at 0.5× on
                          opposite body part with disable_headshot.
-  strategy='repeat'    → Perforate: calc_params['sub_hits'] full-damage
+  strategy='repeat'    → Perforate: calc_params['sub_hits'] + the injuries
+                         the target carries when the use starts, full-damage
                          thrusts, each an independent roll, stopping when
-                         the target dies (perforate_skill.nut:80-138).
+                         the target dies (perforate_skill.nut:79-138).
   strategy='assault'   → Pollaxe Assault: Impale, then (sub_hits == 2, the
                          target is staggered) the axe-head Strike at x0.75
                          total, x1.2 armor, +0.2 piercing
@@ -42,17 +43,23 @@ ASSAULT_STRIKE_DAMAGE_MULT = 0.75
 ASSAULT_STRIKE_ARMOR_MULT = 1.2
 ASSAULT_STRIKE_PIERCING_ADD = 0.2
 
+# A hit injures only from this much hitpoint damage (character.nut:71).
+INJURY_MIN_DAMAGE = 10
 
-def _sub_hit_count(strategy, sub_hits):
-    """Sub-hits per use. 'repeat' / 'assault' read the route-resolved
-    sub_hits (a met condition adds one); the fixed shapes keep their BB
-    counts (cascade_skill.nut / hail_skill.nut: 3 swings; split_man: one
-    forced secondary)."""
+
+def _sub_hit_count(strategy, sub_hits, injuries):
+    """Sub-hits of one use. 'repeat' (Perforate) adds one thrust per injury
+    the target carries (perforate_skill.nut:79-104); 'assault' reads the
+    route-resolved sub_hits (a checked stagger adds the Strike); the fixed
+    shapes keep their BB counts (cascade_skill.nut / hail_skill.nut: 3
+    swings; split_man: one forced secondary)."""
     if strategy == 'triple':
         return 3
     if strategy == 'split_man':
         return 2
-    if strategy in ('repeat', 'assault'):
+    if strategy == 'repeat':
+        return sub_hits + injuries
+    if strategy == 'assault':
         return sub_hits
     if strategy == 'single':
         return 1
@@ -112,7 +119,8 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                           executioner, crippling_strikes, head_hunter,
                           scales_with_missing_hp, calc_params,
                           enemy_perks, armor_loadouts, injury_immune,
-                          skill_resistance, heal_per_turn):
+                          skill_resistance, heal_per_turn,
+                          injury_category, injury_pools):
     """
     Monte Carlo simulation: hits-to-kill distribution.
 
@@ -132,7 +140,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
     # DEFAULT_CALC_PARAMS + per-skill overrides — every key below is
     # always present, so we read with direct access (NO GUARD RULE).
     strategy = calc_params['strategy']
-    sub_count_for_strategy = _sub_hit_count(strategy, calc_params['sub_hits'])
+    base_sub_hits = calc_params['sub_hits']
 
     bleed_per_turn       = calc_params['bleed_per_turn']
     force_body_part      = calc_params['force_body_part']
@@ -168,12 +176,15 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
     if has_steel_brow:
         defender_perks_engine.append('Steel Brow')
 
-    injury_threshold = 0.25
+    # Attacker-side injury threshold multiplier (BB hitInfo.InjuryThresholdMult,
+    # skill.nut:1798): Gash x0.66 / x0.5 (gash_skill.nut:113-117), Crippling
+    # Strikes x0.66. Every injury's own threshold is scaled by it.
+    injury_threshold_mult = 1.0
     gash_mult = calc_params['gash_injury_mult']
     if gash_mult:
-        injury_threshold *= gash_mult
+        injury_threshold_mult *= gash_mult
     if crippling_strikes:
-        injury_threshold *= 0.66
+        injury_threshold_mult *= 0.66
 
     loadout_table = _build_loadout_table(armor_loadouts)
 
@@ -211,7 +222,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
             current_head_armor = defender['head_armor']
         current_hp = defender['hitpoints']
         max_hp = defender['hitpoints']
-        is_injured = False
+        injuries_present = set()   # bb_data.injury ids the target carries
         nine_lives_used = False
         head_hunter_armed = False
         first_injury_hit = 0
@@ -237,9 +248,10 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                 kill_type = 'bleed'
                 break
 
-            # Multi-hit attack: 1 / 2 / 3 sub-hits per BB skill identity.
-            # See bb-damage-engine/docs/multi_hit_caller.md.
-            sub_count = sub_count_for_strategy
+            # Sub-hits of this use per BB skill identity (multi_hit_caller.md);
+            # Perforate counts the target's injuries before its first thrust
+            # (perforate_skill.nut:79).
+            sub_count = _sub_hit_count(strategy, base_sub_hits, len(injuries_present))
             primary_body_part = None
             attack_hp_dmg = 0
             attack_armor_dmg = 0
@@ -278,7 +290,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                     nimble_perc=nimble_mult_passthrough,
                     damage_regular_received_perc=1.0,
                     skill_resistance_perc=skill_resistance,
-                    is_injured=is_injured,
+                    is_injured=len(injuries_present) > 0,
                     # The wiki simulator does not model these — passed
                     # explicitly at their no-effect values (the engine has
                     # NO DEFAULTS; every Defender field is required).
@@ -331,13 +343,25 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                     max_sub_hit_was_headshot = result.headshot
                 last_sub_hit_was_headshot = result.headshot
 
-                # Per-sub-hit injury check (BB onDamageReceived per hit).
-                if (not injury_immune and not is_injured
-                        and max_hp > 0 and result.hp_removed > 0):
-                    eff_threshold = injury_threshold * (1.25 if result.headshot else 1.0)
-                    if result.hp_removed / max_hp >= eff_threshold:
-                        is_injured = True
-                        first_injury_hit = hits
+                # Per-sub-hit injury roll (BB actor.nut:1679-1704): a hit of at
+                # least INJURY_MIN_DAMAGE adds one random injury from the
+                # skill's pool for the body part hit whose threshold (x1.25 on
+                # the head, :1682; x the attacker's mults) the hitpoint ratio
+                # reaches and which the target does not carry yet (:1688).
+                # None left = no injury. A skill without a pool never injures.
+                if (not injury_immune and injury_category is not None
+                        and result.hp_removed >= INJURY_MIN_DAMAGE):
+                    hp_ratio = result.hp_removed / max_hp
+                    part_mult = 1.25 if result.body_part == 'head' else 1.0
+                    candidates = [
+                        inj['id']
+                        for inj in injury_pools[(injury_category, result.body_part)]
+                        if inj['threshold'] * injury_threshold_mult * part_mult <= hp_ratio
+                        and inj['id'] not in injuries_present]
+                    if candidates:
+                        injuries_present.add(random.choice(candidates))
+                        if first_injury_hit == 0:
+                            first_injury_hit = hits
 
                 # Nine Lives — single block covering both per-sub-hit
                 # (triple/single) and atomic-on-summed-total (split_man,
@@ -454,7 +478,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
         peak_total_armor = 0
         peak_primary_body_part = None
 
-        for i in range(sub_count_for_strategy):
+        for i in range(_sub_hit_count(strategy, base_sub_hits, 0)):
             sub_damage_mult, sub_armor_mult, sub_piercing_add = _sub_hit_shape(strategy, i)
             secondary = strategy == 'split_man' and i == 1
             peak_atk = build_attacker(
