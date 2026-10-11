@@ -137,7 +137,10 @@ def load_weapons():
         FROM bb_data.weapon_skill_connection c
         JOIN bb_data.weapon_skill s ON s.id = c.weapon_skill_id
         JOIN bb_data.item_weapon iw ON iw.id = c.weapon_id
-        JOIN bb_data.weapon_skill da ON da.id = iw.default_attack_skill_base_id
+        -- LEFT: a weapon without an attack of opportunity (throwing weapons,
+        -- bows) has no default attack skill; its stances, if any, then have
+        -- no counter-attack injury list (default_attack_injury_category NULL).
+        LEFT JOIN bb_data.weapon_skill da ON da.id = iw.default_attack_skill_base_id
         WHERE c.weapon_id IN (SELECT id FROM weapon) AND s.damage_perc > 0
         ORDER BY c.weapon_id, c.sort_order, (s.mastery_class IS NOT NULL)
     """)
