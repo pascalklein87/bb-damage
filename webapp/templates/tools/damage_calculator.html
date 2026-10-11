@@ -197,6 +197,14 @@
 
         <h2 style="margin-top: 1.2rem; margin-bottom: 0.3rem">Skill</h2>
         <div id="skill-radios" class="skill-radios"></div>
+        <div id="initiative-row" class="initiative-row" style="display:none">
+            <label for="attacker-initiative">Initiative</label>
+            <input type="number" id="attacker-initiative" class="stat-input" min="0" step="1"
+                   value="{{ initiative }}"
+                   data-max-mult="{{ initiative_max_mult }}"
+                   data-full-at="{{ initiative_full_bonus_at }}">
+            <span class="hint" id="initiative-mult"></span>
+        </div>
     </div>
 
     <div class="col-enemy-wrapper">

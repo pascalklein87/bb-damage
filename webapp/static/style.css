@@ -274,6 +274,13 @@ button:disabled { background: #666; cursor: wait; }
     color: #aaa;
 }
 
+.initiative-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0.3rem 0;
+}
+
 .skill-radios input[type="radio"] {
     width: 16px;
     height: 16px;

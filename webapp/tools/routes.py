@@ -63,7 +63,19 @@ SKILL_CALC_PARAMS = {
     'hail':                   {'strategy': 'triple'},
     'hail-mastery':           {'strategy': 'triple'},
     'split-man':              {'strategy': 'split_man'},
+    'lunge':                  {'initiative_scaling': 'total'},
 }
+
+# Initiative-scaled damage (Lunge). BB: DamageTotalMult *= minf(2.0,
+# 2.0 * max(0, Initiative) / 175.0), lunge_skill.nut:260-261. Initiative is
+# the attacker's value as shown BEFORE the attack: skill.nut:716 spends the
+# skill's fatigue before onUse (:725) and the formula's
+# "+ getFatigueCost() * FatigueToInitiativeRate" adds it back.
+INITIATIVE_FULL_BONUS_AT = 175.0
+LUNGE_INITIATIVE_MAX_MULT = 2.0
+# Prefilled field value: the nearest BB integer to the x1.0 point (87.5), so
+# an untouched field computes base damage (user decision 2026-10-11).
+INITIATIVE_DEFAULT = 88
 # Head/body forcing (Puncture -> body, Lash/Hail -> head) is not listed here:
 # it comes from bb_data.weapon_skill.force_body_part via the skill's
 # 'force_body_part' field, applied in expand_calculator_skills below.
@@ -89,6 +101,7 @@ DEFAULT_CALC_PARAMS = {
     'headshot_ap_add':      0,
     'armor_damage_mult':    1.0,
     'gash_injury_mult':     0,
+    'initiative_scaling':   'none',
 }
 
 
@@ -398,6 +411,26 @@ def damage_calculator():
         'is_melee_attack': not is_thrown,
     }
 
+    # Initiative-scaled skill (Lunge): the attacker's Initiative comes from
+    # the URL; its multiplier folds into total damage like any other
+    # DamageTotalMult term.
+    initiative_scaling = calc_params['initiative_scaling']
+    if initiative_scaling == 'total':
+        try:
+            initiative = int(request.args.get('init', INITIATIVE_DEFAULT))
+        except ValueError:
+            return _calc_input_error("init (Initiative) must be a whole number.")
+        initiative_mult = min(
+            LUNGE_INITIATIVE_MAX_MULT,
+            LUNGE_INITIATIVE_MAX_MULT * max(0, initiative) / INITIATIVE_FULL_BONUS_AT)
+        attacker['damage_total_perc'] *= initiative_mult
+    elif initiative_scaling == 'none':
+        initiative = None
+    else:
+        raise ValueError(
+            f"skill {skill['slug']!r}: unknown initiative_scaling "
+            f"{initiative_scaling!r}")
+
     # Apply attacker buff
     if sel_buff:
         buff_mult = sel_buff['value'] / 100.0
@@ -472,6 +505,8 @@ def damage_calculator():
         cache_parts.append(f'buff={buff_slug}')
     if champion:
         cache_parts.append('champion=1')
+    if initiative is not None:
+        cache_parts.append(f'init={initiative}')
     if is_custom_brother:
         cache_parts.append(f'cb_hp={enemy["hitpoints"]}&cb_body={enemy["body_armor"]}&cb_head={enemy["head_armor"]}')
         cb_perks_str = request.args.get('cb_perks', '')
@@ -581,4 +616,8 @@ def damage_calculator():
                            weapons=calc_weapons, enemies=calc_enemies,
                            results=results, selected=selected,
                            sel_weapon=sel_weapon, sel_enemy=sel_enemy,
-                           attacker_buffs=ATTACKER_BUFFS)
+                           attacker_buffs=ATTACKER_BUFFS,
+                           initiative=(initiative if initiative is not None
+                                       else INITIATIVE_DEFAULT),
+                           initiative_max_mult=LUNGE_INITIATIVE_MAX_MULT,
+                           initiative_full_bonus_at=INITIATIVE_FULL_BONUS_AT)

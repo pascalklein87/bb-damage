@@ -9,6 +9,9 @@ bb-damage-engine's browser JS at `/bb-damage-engine/<path>`.
 
 - `/` - the calculator. Query params select weapon / enemy / skill / mods;
   parameterized URLs carry `noindex,follow` and canonical to bare `/`.
+  `init` = the attacker's Initiative, read only for Initiative-scaled skills
+  (Lunge: total damage x min(2.0, 2.0 x Initiative / 175), lunge_skill.nut:260);
+  the field is prefilled with 88, the nearest integer to the x1.0 point.
 - `/spec` - the plain-English damage calculation spec
 - `/cache` - simulation result cache view
 - `/bb-damage-engine/<path>` - bb-damage-engine's browser JS

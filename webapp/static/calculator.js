@@ -68,6 +68,7 @@ $(function() {
         }
         $radios.show();
         updateEnemyNote();
+        applyInitiativeRow();
 
         // Stat card shows weapon base stats
         $('#ws-damage').text(min + ' – ' + max);
@@ -472,6 +473,33 @@ $(function() {
 
     $(document).on('change', 'input[name="skill"]', updateEnemyNote);
 
+    // === Initiative (Lunge) ===
+    // Display mirror of routes.py's Lunge multiplier (BB lunge_skill.nut:260-261):
+    // mult = min(maxMult, maxMult * max(0, init) / fullAt). The constants arrive
+    // from the server as data attributes; the hit itself is computed server-side.
+    function initiativeMult(init) {
+        var $in = $('#attacker-initiative');
+        var maxMult = parseFloat($in.data('max-mult'));
+        var fullAt = parseFloat($in.data('full-at'));
+        return Math.min(maxMult, maxMult * Math.max(0, init) / fullAt);
+    }
+
+    function updateInitiativeMult() {
+        var init = parseInt($('#attacker-initiative').val(), 10);
+        var text = isNaN(init) ? '' : 'damage x' + initiativeMult(init).toFixed(2);
+        $('#initiative-mult').text(text);
+    }
+
+    function applyInitiativeRow() {
+        var skill = getSelectedSkill();
+        var scales = skill !== null && skill.calc_params.initiative_scaling !== 'none';
+        $('#initiative-row').toggle(scales);
+        if (scales) updateInitiativeMult();
+    }
+
+    $(document).on('change', 'input[name="skill"]', applyInitiativeRow);
+    $('#attacker-initiative').on('input', updateInitiativeMult);
+
     // === Calculate ===
 
     function getSelectedSkill() {
@@ -488,6 +516,9 @@ $(function() {
 
         var skill = getSelectedSkill();
         if (skill) parts.push('skill=' + skill.slug);
+        if (skill && skill.calc_params.initiative_scaling !== 'none') {
+            parts.push('init=' + $('#attacker-initiative').val());
+        }
 
         var mods = [];
         var modCheckboxes = '#trait-double-grip, #trait-drunkard, #trait-huge, #trait-tiny, #trait-brute, #perk-duelist, #perk-killing-frenzy, #perk-head-hunter, #perk-crippling-strikes, #perk-executioner, #trait-juggler, #trait-killer-on-the-run, #injury-broken-arm, #injury-split-shoulder, #injury-cut-arm-sinew, #injury-injured-shoulder, #status-dazed, #status-distracted, #status-strange-mushrooms';
@@ -853,6 +884,7 @@ $(function() {
             }
         });
         updateEnemyNote();
+        applyInitiativeRow();
     }
 
     // Update extra summary if mods are pre-checked
