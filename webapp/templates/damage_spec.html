@@ -202,17 +202,15 @@ Typical values: 0.40 (light armor) to 1.0 (heavy armor, no benefit).
 <p>Halves bleed duration from 2 turns to 1 turn. Prevents bleed stacks from overlapping.</p>
 
 <h2>Injury</h2>
-<p>An injury occurs when a single hit deals HP damage greater than or equal to 25% of the enemy's max HP:</p>
+<p>After every hit (every sub-hit of a multi-hit attack) BB rolls for an injury (actor.nut:1679-1704). The hit must remove at least 10 hitpoints (character.nut:71). The candidates are the injuries of the skill's injury type (cutting, piercing, blunt, burning) for the body part hit whose threshold the hit reaches and which the target does not carry yet; one of them is added at random. Pools and thresholds come from BB's character_injuries.nut.</p>
 <pre>
-InjuryThreshold = 0.25 * MaxHP
+Injury applies when:  HPDamage / MaxHP >= Threshold * HeadFactor * AttackerMult
 
-Head injuries have a higher threshold:
-  HeadInjuryThreshold = 0.25 * MaxHP * 1.25
-
-With Crippling Strikes (attacker perk):
-  InjuryThreshold *= 0.66 (34% lower threshold)
+Threshold:     per injury, 0.25 or 0.50 of max HP (one blunt head injury: 0.60)
+HeadFactor:    1.25 on a head hit (actor.nut:1682), 1.0 on the body
+AttackerMult:  Gash x0.66 (mastery x0.50), Crippling Strikes x0.66
 </pre>
-<p>Each sub-hit in multi-hit attacks (like Cascade) checks independently. Undead, beasts, and some other enemies are immune to injuries.</p>
+<p>Skills without an injury list (Destroy Armor, Demolish Armor) never injure. A stance's counter-attack (Riposte) injures with the weapon's default attack, because BB ripostes with the attack of opportunity (actor.nut:1442-1455). Undead, beasts, and some other enemies are immune to injuries. "Hits to injure" counts the first injury; the simulation keeps every injury the target collects, which Perforate reads (see below).</p>
 
 <h2>Morale Check</h2>
 <p>A morale check is triggered when a single hit deals at least 15 HP damage. The enemy then rolls against their Resolve. Failure drops morale by one level.</p>
@@ -238,7 +236,7 @@ Enemy turn: 2 stacks tick (steady state with 2-turn bleeds)
 <p>Nine Lives clears all bleed stacks. Undead, Alps, and Schrats are immune to bleeding.</p>
 
 <h2>Racial Resistances</h2>
-<p>Certain enemy groups take reduced damage from specific weapon skills. The resistance is applied as a multiplier to DamageRegularReceivedPerc for that skill.</p>
+<p>Certain enemy groups take reduced damage from specific weapon skills. The resistance is applied as a multiplier to DamageRegularReceivedPerc for that skill. "Other piercing" below is BB's halfResistance list: Stab, Thrust, Puncture, Deathblow, Impale, Rupture, Prong, Lunge, Perforate, Skewer and Throw Spear (skeleton_racial.nut:28-39). A throwing mastery variant (3t / 2t) resists like its base skill.</p>
 
 <h3>Alps: Existing Partly in Dreams</h3>
 <p>Resistant to ranged weapons and piercing melee attacks:</p>
@@ -350,6 +348,30 @@ AddedHeadshotDamagePerc += 0.50 on headshots
 
 <h3>Cleave / Whip</h3>
 <p>Applies bleed (see Bleeding section). Base: 5 per turn. Mastery: 10 per turn.</p>
+
+<h3>Lunge (Fencing Sword) and Skewer (Estoc): Initiative</h3>
+<p>Both read the attacker's Initiative as shown before the attack: BB spends the skill's fatigue first (skill.nut:716) and the formulas add it back. The calculator's Initiative field is prefilled with 88, the nearest integer to Lunge's x1.0 point.</p>
+<pre>
+Lunge:  DamageTotalPerc *= min(2.0, 2.0 * Initiative / 175)      (lunge_skill.nut:260-261)
+        Initiative 0 = x0, 87.5 = x1.0, 175 or more = x2.0
+Skewer: Damage += 20                                             (skewer_skill.nut:85-86)
+        PiercingPerc += min(0.55, 0.55 * Initiative / 175)       (skewer_skill.nut:83-84)
+</pre>
+
+<h3>Execute (Executioner's Sword)</h3>
+<pre>
+Headshot chance += 15 percentage points                          (execute_skill.nut:116)
+</pre>
+
+<h3>Perforate (Estoc)</h3>
+<p>Two thrusts per use, plus one more for every injury the target carries when the use starts (counted before the first thrust, perforate_skill.nut:79-104). Every thrust is a full-damage independent roll; the remaining thrusts are skipped once the target is dead. The simulation tracks the injuries its own hits inflict (see Injury), so the thrust count grows during the fight. "Hits to kill" counts uses.</p>
+
+<h3>Assault (Pollaxe)</h3>
+<p>An Impale thrust at base stats. If the target is staggered afterwards, a second strike with the axe head follows with its own roll (assault_skill.nut:113-118):</p>
+<pre>
+Strike: DamageTotalPerc *= 0.75, DamageArmorPerc *= 1.2, PiercingPerc += 0.2   (assault_skill.nut:163-165)
+</pre>
+<p>Nothing in a sequence of Assaults staggers the target, so the "enemy staggered" checkbox decides whether the Strike fires.</p>
 
 <h2>Implementation Note</h2>
 <p>In Battle Brothers, a skill's PiercingPerc replaces the weapon's value entirely. In our calculator, we compute it as a delta: <code>FinalPiercing = WeaponBasePiercing + (SkillPiercing - WeaponBasePiercing)</code>. The end result is identical for standard weapons. The delta approach has the advantage that when a user enters custom stats for a Named weapon, the skill's relative contribution is preserved correctly.</p>

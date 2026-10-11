@@ -147,6 +147,10 @@ def expand_calculator_skills(weapons):
 
             s = dict(skill)
             s['calc_params'] = params
+            # Racial resistance rows (enemy_skill_resistance.skill_id) are keyed
+            # by the base skill slug; the throwing mastery variants below keep
+            # this field so they resist like their base skill.
+            s['resistance_slug'] = slug
             skills.append(s)
 
             # Throwing weapons: add mastery variants at 3t and 2t range
@@ -574,7 +578,7 @@ def damage_calculator():
     # Skill-to-enemy resistance lookup
     # Racial resistance is keyed by skill slug; most skills have none (1.0).
     enemy_res = ENEMY_RESISTANCES[enemy['id']]
-    skill_resistance = enemy_res.get(skill['slug'], 1.0)
+    skill_resistance = enemy_res.get(skill['resistance_slug'], 1.0)
 
     # Check cache
     cached = get_cached(cache_url)
