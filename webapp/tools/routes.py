@@ -63,18 +63,31 @@ SKILL_CALC_PARAMS = {
     'hail':                   {'strategy': 'triple'},
     'hail-mastery':           {'strategy': 'triple'},
     'split-man':              {'strategy': 'split_man'},
-    'lunge':                  {'initiative_scaling': 'total'},
+    # Initiative-scaled skills: term = min(initiative_max, initiative_max *
+    # max(0, Initiative) / INITIATIVE_FULL_BONUS_AT). 'total' multiplies total
+    # damage (Lunge, lunge_skill.nut:260-261); 'piercing' adds armor-ignoring
+    # damage (Skewer, skewer_skill.nut:83-84; its +20 flat damage is
+    # bb_data.weapon_skill.damage_bonus, skewer_skill.nut:85-86).
+    'lunge':                  {'initiative_scaling': 'total', 'initiative_max': 2.0},
+    'skewer':                 {'initiative_scaling': 'piercing', 'initiative_max': 0.55},
+    # Execute: HitChance[Head] += 15 (execute_skill.nut:116).
+    'execute':                {'head_chance_add': 15},
+    # Conditional extra sub-hit, toggled by the calculator's checkbox:
+    # Perforate fires 2 thrusts + 1 per injury on the target
+    # (perforate_skill.nut:79-104; the box = one injury). Assault's Impale is
+    # followed by the axe-head Strike when the target is staggered
+    # (assault_skill.nut:113-118; the Strike's modifiers live in simulator.py).
+    'perforate':              {'strategy': 'repeat', 'sub_hits': 2, 'condition': 'injured'},
+    'assault':                {'strategy': 'assault', 'sub_hits': 1, 'condition': 'staggered'},
 }
 
-# Initiative-scaled damage (Lunge). BB: DamageTotalMult *= minf(2.0,
-# 2.0 * max(0, Initiative) / 175.0), lunge_skill.nut:260-261. Initiative is
-# the attacker's value as shown BEFORE the attack: skill.nut:716 spends the
-# skill's fatigue before onUse (:725) and the formula's
-# "+ getFatigueCost() * FatigueToInitiativeRate" adds it back.
+# Initiative is the attacker's value as shown BEFORE the attack: skill.nut:716
+# spends the skill's fatigue before onUse (:725) and the BB formulas'
+# "+ getFatigueCost() * FatigueToInitiativeRate" add it back. The term caps at
+# Initiative 175 (lunge_skill.nut:260, skewer_skill.nut:83).
 INITIATIVE_FULL_BONUS_AT = 175.0
-LUNGE_INITIATIVE_MAX_MULT = 2.0
-# Prefilled field value: the nearest BB integer to the x1.0 point (87.5), so
-# an untouched field computes base damage (user decision 2026-10-11).
+# Prefilled field value: the nearest BB integer to Lunge's x1.0 point (87.5),
+# so an untouched field computes base damage (user decision 2026-10-11).
 INITIATIVE_DEFAULT = 88
 # Head/body forcing (Puncture -> body, Lash/Hail -> head) is not listed here:
 # it comes from bb_data.weapon_skill.force_body_part via the skill's
@@ -102,6 +115,10 @@ DEFAULT_CALC_PARAMS = {
     'armor_damage_mult':    1.0,
     'gash_injury_mult':     0,
     'initiative_scaling':   'none',
+    'initiative_max':       0.0,
+    'head_chance_add':      0,
+    'sub_hits':             1,
+    'condition':            'none',
 }
 
 
@@ -230,6 +247,10 @@ def damage_calculator():
     active_mods = mods_str.split('_') if mods_str else []
     buff_slug = request.args.get('buff', '')
     champion = request.args.get('champion', '') == '1'
+    # Checkbox states of the conditional sub-hit skills (Perforate / Assault);
+    # read on every request so the template restores them.
+    injured_checked = request.args.get('injured', '') == '1'
+    staggered_checked = request.args.get('staggered', '') == '1'
 
     # Find selected items by slug for template pre-selection
     sel_weapon = next((w for w in calc_weapons
@@ -370,6 +391,9 @@ def damage_calculator():
     hitpoint_damage_minimum  = skill['hitpoint_damage_minimum']
     calc_params              = skill['calc_params']
     skill_name               = skill['name']
+    # Execute: HitChance[Head] += 15 (execute_skill.nut:116), on top of the
+    # 25 base + weapon bonus (or the edited hs value).
+    headshot_chance += calc_params['head_chance_add'] / 100.0
 
     # Build the BB-engine modifier-name list; engine handles all numeric
     # values. Double Grip is 1H-melee-only (double_grip.nut MeleeDamageMult,
@@ -415,21 +439,41 @@ def damage_calculator():
     # the URL; its multiplier folds into total damage like any other
     # DamageTotalMult term.
     initiative_scaling = calc_params['initiative_scaling']
-    if initiative_scaling == 'total':
+    if initiative_scaling == 'none':
+        initiative = None
+    else:
         try:
             initiative = int(request.args.get('init', INITIATIVE_DEFAULT))
         except ValueError:
             return _calc_input_error("init (Initiative) must be a whole number.")
-        initiative_mult = min(
-            LUNGE_INITIATIVE_MAX_MULT,
-            LUNGE_INITIATIVE_MAX_MULT * max(0, initiative) / INITIATIVE_FULL_BONUS_AT)
-        attacker['damage_total_perc'] *= initiative_mult
-    elif initiative_scaling == 'none':
-        initiative = None
+        initiative_max = calc_params['initiative_max']
+        initiative_term = min(
+            initiative_max,
+            initiative_max * max(0, initiative) / INITIATIVE_FULL_BONUS_AT)
+        if initiative_scaling == 'total':
+            attacker['damage_total_perc'] *= initiative_term
+        elif initiative_scaling == 'piercing':
+            attacker['piercing_perc'] = min(1.0, attacker['piercing_perc'] + initiative_term)
+        else:
+            raise ValueError(
+                f"skill {skill['slug']!r}: unknown initiative_scaling "
+                f"{initiative_scaling!r}")
+
+    # Conditional extra sub-hit (Perforate's injury thrust, Assault's Strike):
+    # a checked box adds one sub-hit to the skill's base count.
+    condition = calc_params['condition']
+    if condition == 'none':
+        condition_met = False
+    elif condition == 'injured':
+        condition_met = injured_checked
+    elif condition == 'staggered':
+        condition_met = staggered_checked
     else:
         raise ValueError(
-            f"skill {skill['slug']!r}: unknown initiative_scaling "
-            f"{initiative_scaling!r}")
+            f"skill {skill['slug']!r}: unknown condition {condition!r}")
+    if condition_met:
+        calc_params = dict(calc_params)
+        calc_params['sub_hits'] += 1
 
     # Apply attacker buff
     if sel_buff:
@@ -507,6 +551,8 @@ def damage_calculator():
         cache_parts.append('champion=1')
     if initiative is not None:
         cache_parts.append(f'init={initiative}')
+    if condition_met:
+        cache_parts.append(f'{condition}=1')
     if is_custom_brother:
         cache_parts.append(f'cb_hp={enemy["hitpoints"]}&cb_body={enemy["body_armor"]}&cb_head={enemy["head_armor"]}')
         cb_perks_str = request.args.get('cb_perks', '')
@@ -619,5 +665,6 @@ def damage_calculator():
                            attacker_buffs=ATTACKER_BUFFS,
                            initiative=(initiative if initiative is not None
                                        else INITIATIVE_DEFAULT),
-                           initiative_max_mult=LUNGE_INITIATIVE_MAX_MULT,
-                           initiative_full_bonus_at=INITIATIVE_FULL_BONUS_AT)
+                           initiative_full_bonus_at=INITIATIVE_FULL_BONUS_AT,
+                           injured_checked=injured_checked,
+                           staggered_checked=staggered_checked)

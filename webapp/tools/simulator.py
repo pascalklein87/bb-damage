@@ -16,6 +16,13 @@ Multi-hit shape (per bb-damage-engine/docs/multi_hit_caller.md):
                          each rolls body part independently.
   strategy='split_man' → primary at 1.0× + secondary at 0.5× on
                          opposite body part with disable_headshot.
+  strategy='repeat'    → Perforate: calc_params['sub_hits'] full-damage
+                         thrusts, each an independent roll, stopping when
+                         the target dies (perforate_skill.nut:80-138).
+  strategy='assault'   → Pollaxe Assault: Impale, then (sub_hits == 2, the
+                         target is staggered) the axe-head Strike at x0.75
+                         total, x1.2 armor, +0.2 piercing
+                         (assault_skill.nut:113-118, :163-165).
   else                 → 1 sub-hit (the normal single path).
 
 Nine Lives is per-sub-hit for triple/single (CAN finish-kill on a
@@ -27,6 +34,43 @@ import random
 from collections import Counter
 
 from bb_damage_engine import Defender, execute_attack, build_attacker
+
+
+# Assault's second sub-hit is the axe-head Strike: DamageTotalMult *= 0.75,
+# DamageArmorMult *= 1.2, DamageDirectAdd += 0.2 (assault_skill.nut:163-165).
+ASSAULT_STRIKE_DAMAGE_MULT = 0.75
+ASSAULT_STRIKE_ARMOR_MULT = 1.2
+ASSAULT_STRIKE_PIERCING_ADD = 0.2
+
+
+def _sub_hit_count(strategy, sub_hits):
+    """Sub-hits per use. 'repeat' / 'assault' read the route-resolved
+    sub_hits (a met condition adds one); the fixed shapes keep their BB
+    counts (cascade_skill.nut / hail_skill.nut: 3 swings; split_man: one
+    forced secondary)."""
+    if strategy == 'triple':
+        return 3
+    if strategy == 'split_man':
+        return 2
+    if strategy in ('repeat', 'assault'):
+        return sub_hits
+    if strategy == 'single':
+        return 1
+    raise ValueError(f"unknown strategy {strategy!r}")
+
+
+def _sub_hit_shape(strategy, i):
+    """(damage mult, armor mult, piercing add) of sub-hit i. triple and
+    split_man per bb-damage-engine/docs/multi_hit_caller.md; assault's
+    second sub-hit is the Strike."""
+    if strategy == 'triple':
+        return 0.333, 1.0, 0.0
+    if strategy == 'split_man' and i == 1:
+        return 0.5, 1.0, 0.0
+    if strategy == 'assault' and i == 1:
+        return (ASSAULT_STRIKE_DAMAGE_MULT, ASSAULT_STRIKE_ARMOR_MULT,
+                ASSAULT_STRIKE_PIERCING_ADD)
+    return 1.0, 1.0, 0.0
 
 
 def _build_loadout_table(armor_loadouts):
@@ -88,11 +132,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
     # DEFAULT_CALC_PARAMS + per-skill overrides — every key below is
     # always present, so we read with direct access (NO GUARD RULE).
     strategy = calc_params['strategy']
-    sub_count_for_strategy = (
-        3 if strategy == 'triple' else
-        2 if strategy == 'split_man' else
-        1
-    )
+    sub_count_for_strategy = _sub_hit_count(strategy, calc_params['sub_hits'])
 
     bleed_per_turn       = calc_params['bleed_per_turn']
     force_body_part      = calc_params['force_body_part']
@@ -209,11 +249,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
 
             for i in range(sub_count):
                 # Per-sub-hit damage scaling per multi_hit_caller.md.
-                sub_damage_mult = (
-                    0.333 if strategy == 'triple' else
-                    0.5   if strategy == 'split_man' and i == 1 else
-                    1.0
-                )
+                sub_damage_mult, sub_armor_mult, sub_piercing_add = _sub_hit_shape(strategy, i)
                 # Split Man secondary: clear head_hunter_armed; BB's
                 # hand-rolled hitInfo bypasses HH's HitChance forcing.
                 secondary = strategy == 'split_man' and i == 1
@@ -221,8 +257,8 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                 sub_atk = build_attacker(
                     damage_min=damage_min,
                     damage_max=damage_max,
-                    weapon_armor_damage_perc=attacker['damage_armor_perc'] * armor_damage_mult,
-                    weapon_piercing_perc=attacker['piercing_perc'],
+                    weapon_armor_damage_perc=attacker['damage_armor_perc'] * armor_damage_mult * sub_armor_mult,
+                    weapon_piercing_perc=min(1.0, attacker['piercing_perc'] + sub_piercing_add),
                     skill_damage_perc=attacker['damage_total_perc'] * sub_damage_mult,
                     skill_head_chance_perc=head_chance_perc,
                     skill_id='decapitate' if scales_with_missing_hp else None,
@@ -419,17 +455,13 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
         peak_primary_body_part = None
 
         for i in range(sub_count_for_strategy):
-            sub_damage_mult = (
-                0.333 if strategy == 'triple' else
-                0.5   if strategy == 'split_man' and i == 1 else
-                1.0
-            )
+            sub_damage_mult, sub_armor_mult, sub_piercing_add = _sub_hit_shape(strategy, i)
             secondary = strategy == 'split_man' and i == 1
             peak_atk = build_attacker(
                 damage_min=damage_min,
                 damage_max=damage_max,
-                weapon_armor_damage_perc=attacker['damage_armor_perc'] * armor_damage_mult,
-                weapon_piercing_perc=attacker['piercing_perc'],
+                weapon_armor_damage_perc=attacker['damage_armor_perc'] * armor_damage_mult * sub_armor_mult,
+                weapon_piercing_perc=min(1.0, attacker['piercing_perc'] + sub_piercing_add),
                 skill_damage_perc=attacker['damage_total_perc'] * sub_damage_mult,
                 skill_head_chance_perc=peak_head_chance,
                 skill_id='decapitate' if scales_with_missing_hp else None,

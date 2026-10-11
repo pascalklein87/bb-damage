@@ -9,9 +9,14 @@ bb-damage-engine's browser JS at `/bb-damage-engine/<path>`.
 
 - `/` - the calculator. Query params select weapon / enemy / skill / mods;
   parameterized URLs carry `noindex,follow` and canonical to bare `/`.
-  `init` = the attacker's Initiative, read only for Initiative-scaled skills
-  (Lunge: total damage x min(2.0, 2.0 x Initiative / 175), lunge_skill.nut:260);
-  the field is prefilled with 88, the nearest integer to the x1.0 point.
+  `init` = the attacker's Initiative, read only for Initiative-scaled skills:
+  Lunge multiplies total damage by min(2.0, 2.0 x Initiative / 175)
+  (lunge_skill.nut:260), Skewer adds min(0.55, 0.55 x Initiative / 175)
+  armor-ignoring damage (skewer_skill.nut:83-84); the field is prefilled with
+  88, the nearest integer to Lunge's x1.0 point. `injured=1` / `staggered=1`
+  = the checkbox of a conditional skill: Perforate's third thrust
+  (perforate_skill.nut:79-104), Assault's axe-head Strike
+  (assault_skill.nut:113-118, :163-165).
 - `/spec` - the plain-English damage calculation spec
 - `/cache` - simulation result cache view
 - `/bb-damage-engine/<path>` - bb-damage-engine's browser JS
@@ -28,7 +33,9 @@ cross-database joins (single source of truth, no copy). Only DAMAGE skills
 `bb_damage` holds only what `bb_data` doesn't carry:
 
 - `weapon` (`id, name, unique_slug`) - the curated calculator weapons + display
-  name/slug (`bb_data.item_weapon` has no name).
+  name/slug (`bb_data.item_weapon` has no name). Every regular buyable weapon is
+  in; Lute, the three legendaries, and the Named / Battle Standard design rows
+  stay out (Named stats are entered via the editable weapon stats).
 - `weapon_skill_display` (`name, is_mastery, label, damage_calculator_tooltip,
   show_in_calculator`) - calculator hover text + the curated masteries that
   change the calc's output. `show_in_calculator=0` also excludes Split Shield.

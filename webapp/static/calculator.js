@@ -68,7 +68,7 @@ $(function() {
         }
         $radios.show();
         updateEnemyNote();
-        applyInitiativeRow();
+        applySkillInputs();
 
         // Stat card shows weapon base stats
         $('#ws-damage').text(min + ' – ' + max);
@@ -473,31 +473,47 @@ $(function() {
 
     $(document).on('change', 'input[name="skill"]', updateEnemyNote);
 
-    // === Initiative (Lunge) ===
-    // Display mirror of routes.py's Lunge multiplier (BB lunge_skill.nut:260-261):
-    // mult = min(maxMult, maxMult * max(0, init) / fullAt). The constants arrive
-    // from the server as data attributes; the hit itself is computed server-side.
-    function initiativeMult(init) {
-        var $in = $('#attacker-initiative');
-        var maxMult = parseFloat($in.data('max-mult'));
-        var fullAt = parseFloat($in.data('full-at'));
-        return Math.min(maxMult, maxMult * Math.max(0, init) / fullAt);
+    // === Per-skill inputs: Initiative (Lunge, Skewer) + condition box ===
+    // Display mirror of routes.py's Initiative term (BB lunge_skill.nut:260-261,
+    // skewer_skill.nut:83-84): term = min(max, max * max(0, init) / fullAt), with
+    // `max` from the skill's calc_params and fullAt from the server. The hit
+    // itself is computed server-side.
+    function initiativeTerm(init, skill) {
+        var max = skill.calc_params.initiative_max;
+        var fullAt = parseFloat($('#attacker-initiative').data('full-at'));
+        return Math.min(max, max * Math.max(0, init) / fullAt);
     }
 
     function updateInitiativeMult() {
+        var skill = getSelectedSkill();
         var init = parseInt($('#attacker-initiative').val(), 10);
-        var text = isNaN(init) ? '' : 'damage x' + initiativeMult(init).toFixed(2);
+        var text = '';
+        if (skill !== null && !isNaN(init)) {
+            var term = initiativeTerm(init, skill);
+            var scaling = skill.calc_params.initiative_scaling;
+            if (scaling === 'total') {
+                text = 'damage x' + term.toFixed(2);
+            } else if (scaling === 'piercing') {
+                text = '+' + Math.round(term * 100) + '% piercing';
+            } else {
+                throw new Error('unknown initiative_scaling ' + scaling);
+            }
+        }
         $('#initiative-mult').text(text);
     }
 
-    function applyInitiativeRow() {
+    function applySkillInputs() {
         var skill = getSelectedSkill();
-        var scales = skill !== null && skill.calc_params.initiative_scaling !== 'none';
-        $('#initiative-row').toggle(scales);
-        if (scales) updateInitiativeMult();
+        var scaling = skill === null ? 'none' : skill.calc_params.initiative_scaling;
+        $('#initiative-row').toggle(scaling !== 'none');
+        if (scaling !== 'none') updateInitiativeMult();
+        var condition = skill === null ? 'none' : skill.calc_params.condition;
+        $('#condition-row').toggle(condition !== 'none');
+        $('#condition-injured').toggle(condition === 'injured');
+        $('#condition-staggered').toggle(condition === 'staggered');
     }
 
-    $(document).on('change', 'input[name="skill"]', applyInitiativeRow);
+    $(document).on('change', 'input[name="skill"]', applySkillInputs);
     $('#attacker-initiative').on('input', updateInitiativeMult);
 
     // === Calculate ===
@@ -518,6 +534,12 @@ $(function() {
         if (skill) parts.push('skill=' + skill.slug);
         if (skill && skill.calc_params.initiative_scaling !== 'none') {
             parts.push('init=' + $('#attacker-initiative').val());
+        }
+        if (skill && skill.calc_params.condition === 'injured' && $('#enemy-injured').is(':checked')) {
+            parts.push('injured=1');
+        }
+        if (skill && skill.calc_params.condition === 'staggered' && $('#enemy-staggered').is(':checked')) {
+            parts.push('staggered=1');
         }
 
         var mods = [];
@@ -884,7 +906,7 @@ $(function() {
             }
         });
         updateEnemyNote();
-        applyInitiativeRow();
+        applySkillInputs();
     }
 
     // Update extra summary if mods are pre-checked
