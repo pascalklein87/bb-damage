@@ -198,21 +198,30 @@ def tag_weapon_names(weapons):
     return result
 
 
+def _racial_immunities(enemy):
+    """The enemy's BB immunity flags as the labels the racial-trait panel
+    lists (enemy.is_*_immune columns, armor_damage_received_perc)."""
+    labels = []
+    if enemy['is_bleed_immune']:
+        labels.append('Immune to Bleeding')
+    if enemy['is_injury_immune']:
+        labels.append('Immune to Injuries')
+    if enemy['is_morale_immune']:
+        labels.append('Immune to Morale')
+    if enemy['is_headshot_immune']:
+        labels.append('Immune to Headshots')
+    if enemy['armor_damage_received_perc'] != 1.0:
+        pct = int(round((1.0 - enemy['armor_damage_received_perc']) * 100))
+        labels.append(f'Armor takes {pct}% less damage')
+    return labels
+
+
 def _enrich_enemies(enemies):
     """Attach racial trait data to each enemy for template."""
     result = []
     for e in enemies:
         eid = e['id']
-        immunities = []
-        if e.get('is_bleed_immune'):
-            immunities.append('Immune to Bleeding')
-        if e.get('is_injury_immune'):
-            immunities.append('Immune to Injuries')
-        if e.get('is_morale_immune'):
-            immunities.append('Immune to Morale')
-        if e.get('armor_damage_received_perc', 1.0) != 1.0:
-            pct = int(round((1.0 - e['armor_damage_received_perc']) * 100))
-            immunities.append(f'Armor takes {pct}% less damage')
+        immunities = _racial_immunities(e)
         enemy_res = ENEMY_RESISTANCES[eid]
         res_list = []
         if enemy_res:
@@ -327,6 +336,7 @@ def damage_calculator():
             'is_bleed_immune': False,
             'is_injury_immune': False,
             'is_morale_immune': False,
+            'is_headshot_immune': False,
             'racial_trait': '',
             'armor_damage_received_perc': 1.0,
             'heal_per_turn': 0,
@@ -605,6 +615,7 @@ def damage_calculator():
             enemy_perks=enemy_perks,
             armor_loadouts=armor_loadouts,
             injury_immune=injury_immune,
+            headshot_immune=enemy['is_headshot_immune'],
             skill_resistance=skill_resistance,
             injury_category=skill['injury_category'],
             injury_pools=INJURY_POOLS,
@@ -644,16 +655,7 @@ def damage_calculator():
                 'mult': mult,
                 'percent': int(round(mult * 100)),
             })
-    racial_immunities = []
-    if enemy['is_bleed_immune']:
-        racial_immunities.append('Immune to Bleeding')
-    if enemy['is_injury_immune']:
-        racial_immunities.append('Immune to Injuries')
-    if enemy['is_morale_immune']:
-        racial_immunities.append('Immune to Morale')
-    if enemy['armor_damage_received_perc'] != 1.0:
-        pct = int(round((1.0 - enemy['armor_damage_received_perc']) * 100))
-        racial_immunities.append(f'Armor takes {pct}% less damage')
+    racial_immunities = _racial_immunities(enemy)
 
 
     results = {

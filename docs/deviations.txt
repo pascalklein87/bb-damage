@@ -1,0 +1,54 @@
+Deliberate Deviations from Battle Brothers (damage.bloodngold.com)
+
+ONLY THE USER ADDS / EDITS / REMOVES DEVIATIONS. Found a gap? Put it in
+todos.md and wait for the user. Write here only when the user explicitly says
+"deviation". Silently documenting a gap turns a fixable bug into permanent
+licence.
+
+All mechanics must match Battle Brothers exactly (root README "Match BB
+exactly"). Any difference not listed here is a bug.
+
+
+Unhold regeneration is not modelled
+    BB: unhold_racial.nut:25 heals Unhold, Frost Unhold and Bog Unhold by 15%
+    of max hitpoints at the start of each of their turns (added by unhold.nut,
+    unhold_frost.nut and unhold_bog.nut). The calculator's enemy rows carry
+    heal_per_turn 0 and no racial trait for the three.
+    User Approved Deviation (2026-10-16): Unholds are killed by many brothers
+    at once and the HP regeneration does not kick in after every hit. The
+    simulator models one attack per turn, so a 75 HP heal (500 x 15%) before
+    every attack would roughly double hits to kill against a lone attacker
+    and misrepresent the real fight.
+    Code: webapp/engine/data.py load_enemies, heal_per_turn comment.
+
+
+BB damage modifiers the engine does not know are dropped without effect
+    bb-damage-engine build_attacker forwards a name it has no table entry for
+    and execute_attack never reads it (attack.py build_attacker docstring).
+    The calculator sends only its 19 checkbox names plus Chop and Puncture,
+    all known, so nothing is dropped here: the modifiers below simply have no
+    input and are not modelled. bng-game passes every trait and perk name a
+    brother carries (attack_mods.js names()), so there the drop is live.
+      - Oath of Distinction trait: DamageTotalMult x1.1
+        (oath_of_distinction_trait.nut:87)
+      - Glorious Endurance trait: DamageReceivedTotalMult x(1 - reduction),
+        reduction grows 0.05 per trigger to 0.25 (glorious_endurance_trait.nut:57,
+        :76)
+      - Brawler background: DamageTotalMult x2.0 for the Fists skill only
+        (brawler_background.nut:144-146)
+      - Coup de Grace perk: x1.2 vs a target carrying a temporary injury
+        (perk_coup_de_grace.nut:23-25); Devastating Strikes x1.2
+        (perk_devastating_strikes.nut:18); Sundering Strikes DamageArmorMult
+        +0.2 (perk_sundering_strikes.nut:18). Enemy-only perks.
+      - Potions: Rachegeist x1.25 dealt, x0.75 received
+        (rachegeist_potion_effect.nut:63-64); Geist DamageDirectMeleeAdd +0.05
+        (geist_potion_effect.nut:53); Orc Young DamageArmorMult +0.1
+        (orc_young_potion_effect.nut:53); Honor Guard DamageReceivedRegularMult
+        x0.5 / x0.75 (honor_guard_potion_effect.nut:60-72)
+      - Statuses: Debilitated x0.5 (debilitated_effect.nut:18), Webbed x0.5
+        (web_effect.nut:71), Withered x(1 - 0.25 x turns left)
+        (withered_effect.nut:105), Shellshocked x(1 - 0.05 x turns left)
+        (shellshocked_effect.nut:124), Double Strike x1.2
+        (double_strike_effect.nut:36)
+    User Approved Deviation (2026-10-16): these can be dropped, because we do
+    not model these.

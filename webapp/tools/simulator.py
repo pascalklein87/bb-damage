@@ -34,7 +34,8 @@ import math
 import random
 from collections import Counter
 
-from bb_damage_engine import Defender, execute_attack, build_attacker
+from bb_damage_engine import (Defender, execute_attack, build_attacker,
+                              HEADSHOT_IMMUNE_PERK)
 
 
 # Assault's second sub-hit is the axe-head Strike: DamageTotalMult *= 0.75,
@@ -52,6 +53,30 @@ INJURY_MIN_DAMAGE = 10
 # (indomitable_effect.nut:56). Nimble arrives as the precomputed
 # Defender.nimble_perc; Nine Lives and Resilient are simulator rules below.
 ENGINE_DEFENDER_PERKS = ('Battle Forged', 'Steel Brow', 'Indomitable')
+
+# Cascade / Hail: each of the three swings deals a third
+# (cascade_skill.nut:118, hail_skill.nut:132: DamageTotalMult *= 0.33333334).
+TRIPLE_SUB_HIT_DAMAGE_MULT = 0.33333334
+
+# A bleed skill (Cleave, Rupture, Whip) adds a bleeding_effect when the hit
+# removed at least this many hitpoints (character.nut:88
+# MinDamageToApplyBleeding; cleave.nut:104, rupture.nut:119,
+# whip_skill.nut:109). The effect ticks for 2 turns (bleeding_effect.nut:3);
+# Resilient's NegativeStatusEffectDuration -5 (perk_hold_out.nut:18) floors
+# it at 1 (bleeding_effect.nut:71).
+BLEED_MIN_DAMAGE = 6
+BLEED_TURNS = 2
+BLEED_TURNS_RESILIENT = 1
+
+# Nine Lives leaves the survivor at 11-15 hitpoints (actor.nut:1578).
+NINE_LIVES_HP_MIN = 11
+NINE_LIVES_HP_MAX = 15
+
+# A hit of at least this many hitpoints triggers a morale check
+# (character.nut:211 OnHitMinDamage, actor.nut:1743); with Fearsome any
+# hitpoint loss does (perk_fearsome.nut:42).
+MORALE_CHECK_MIN_DAMAGE = 15
+FEARSOME_MIN_DAMAGE = 1
 
 
 def _sub_hit_count(strategy, sub_hits, injuries):
@@ -78,7 +103,7 @@ def _sub_hit_shape(strategy, i):
     split_man per bb-damage-engine/docs/multi_hit_caller.md; assault's
     second sub-hit is the Strike."""
     if strategy == 'triple':
-        return 0.333, 1.0, 0.0
+        return TRIPLE_SUB_HIT_DAMAGE_MULT, 1.0, 0.0
     if strategy == 'split_man' and i == 1:
         return 0.5, 1.0, 0.0
     if strategy == 'assault' and i == 1:
@@ -126,7 +151,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                           crippling_strikes, head_hunter,
                           scales_with_missing_hp, calc_params,
                           enemy_perks, armor_loadouts, injury_immune,
-                          skill_resistance, heal_per_turn,
+                          headshot_immune, skill_resistance, heal_per_turn,
                           injury_category, injury_pools):
     """
     Monte Carlo simulation: hits-to-kill distribution.
@@ -172,8 +197,12 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
     has_resilient = 'Resilient' in enemy_perks
 
     # Defender perks the engine applies by name (ENGINE_DEFENDER_PERKS);
-    # Nimble goes in as the precomputed Defender.nimble_perc below.
+    # Nimble goes in as the precomputed Defender.nimble_perc below. A
+    # headshot-immune enemy (enemy.is_headshot_immune, BB IsImmuneToHeadshots
+    # e.g. sand_golem.nut:307) carries the engine's pseudo-perk for it.
     defender_perks_engine = [p for p in ENGINE_DEFENDER_PERKS if p in enemy_perks]
+    if headshot_immune:
+        defender_perks_engine.append(HEADSHOT_IMMUNE_PERK)
 
     # Attacker-side injury threshold multiplier (BB hitInfo.InjuryThresholdMult,
     # skill.nut:1798): Gash x0.66 / x0.5 (gash_skill.nut:113-117), Crippling
@@ -370,7 +399,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                 if ((strategy != 'split_man' or i == sub_count - 1)
                         and current_hp <= 0 and not nine_lives_used
                         and has_nine_lives):
-                    current_hp = random.randint(11, 15)
+                    current_hp = random.randint(NINE_LIVES_HP_MIN, NINE_LIVES_HP_MAX)
                     bleed_stacks = []
                     nine_lives_used = True
 
@@ -390,21 +419,18 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
             max_hit_hp_dmg = max(max_hit_hp_dmg, attack_hp_dmg)
             max_hit_armor_dmg = max(max_hit_armor_dmg, attack_armor_dmg)
 
-            # Bleed application: BB rule is per-skill (Cleave/Gash/Rupture
-            # apply via their own onTargetHit). Cascade/Hail/Split Man do
-            # NOT apply bleed. Wiki's simplified single-hit threshold is
-            # preserved for non-multi-hit skills only.
-            if (strategy not in ('triple', 'split_man')
-                    and bleed_per_turn > 0
-                    and max_single_hit_hp >= 6):
-                bleed_stacks.append(1 if has_resilient else 2)
+            # Bleed: bleed_per_turn comes from bb_data and is non-zero only
+            # for Cleave, Rupture and Whip (the BB skills that add a
+            # bleeding_effect); the hit must remove BLEED_MIN_DAMAGE.
+            if bleed_per_turn > 0 and max_single_hit_hp >= BLEED_MIN_DAMAGE:
+                bleed_stacks.append(BLEED_TURNS_RESILIENT if has_resilient else BLEED_TURNS)
 
             # Resolve / Fearsome - fire on the first attack where any
             # sub-hit's hp_removed crosses the threshold (BB checks per
             # onDamageReceived, so any sub-hit qualifies).
-            if first_resolve_hit == 0 and max_single_hit_hp >= 15:
+            if first_resolve_hit == 0 and max_single_hit_hp >= MORALE_CHECK_MIN_DAMAGE:
                 first_resolve_hit = hits
-            if first_fearsome_hit == 0 and max_single_hit_hp >= 1:
+            if first_fearsome_hit == 0 and max_single_hit_hp >= FEARSOME_MIN_DAMAGE:
                 first_fearsome_hit = hits
 
             if hits > 100:

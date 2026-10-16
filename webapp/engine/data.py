@@ -200,8 +200,17 @@ def load_enemies():
             'is_bleed_immune': bool(r['is_bleed_immune']),
             'is_injury_immune': bool(r['is_injury_immune']),
             'is_morale_immune': bool(r['is_morale_immune']),
+            # BB IsImmuneToHeadshots (sand_golem.nut:307): no headshot bonus
+            # and no Pound head piercing (actor.nut:1489, pound.nut:153).
+            'is_headshot_immune': bool(r['is_headshot_immune']),
             'racial_trait': _coalesce(r['racial_trait'], ''),
             'armor_damage_received_perc': r['armor_damage_received_perc'],
+            # Percent of max hitpoints healed before each attack (Barbarian
+            # Madman 6, trickster_god_racial.nut:25). Unholds carry 0 although
+            # unhold_racial.nut:25 heals 15% per turn.
+            # User Approved Deviation: Unholds are killed by many brothers at
+            # once and the HP regeneration does not kick in after every hit
+            # (docs/deviations.txt).
             'heal_per_turn': r['heal_per_turn'],
             'slug': r['unique_slug'],
         })

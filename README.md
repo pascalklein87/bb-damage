@@ -47,6 +47,11 @@ with the weapon's default attack, a skill without a list (Destroy Armor) never.
   skill slug), `attacker_buff` - no `bb_data` equivalent.
 - `cache` - calculator results.
 
+## Deviations from BB
+
+Every deliberate difference from Battle Brothers is in `docs/deviations.txt`; only
+the user adds entries there (a found gap goes to `todos.md`).
+
 ## Local & deploy
 
 ```

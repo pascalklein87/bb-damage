@@ -460,7 +460,7 @@
     <p>The average number of hits needed to reduce the enemy's HP to zero.</p>
 
     <h3>Hits to Injure</h3>
-    <p>An injury occurs when a single hit deals HP damage equal to or greater than 25% of the enemy's maximum HP. Head injuries require a higher threshold of 31.25% (25% &times; 1.25), but the 150% headshot damage more than offsets this. Crippling Strikes lowers all injury thresholds by 34%.</p>
+    <p>A hit that removes at least 10 HP can injure. Every injury has its own threshold as a share of the enemy's maximum HP (25%, 50% or 60% depending on the injury), and head injuries need 1.25 times that. The hit picks one random injury the enemy does not carry yet from the skill's injury pool for the body part hit, among those whose threshold the hit reaches. Crippling Strikes lowers every threshold by 34%, Gash by 34% (50% with Sword Mastery).</p>
 
     <h3>Hits to Trigger Morale Check</h3>
     <p>A morale check is triggered when a single hit deals at least 15 HP damage. With the Fearsome perk, the threshold drops to just 1 HP damage. We simulate when the first morale check occurs, but not whether morale actually drops.</p>
