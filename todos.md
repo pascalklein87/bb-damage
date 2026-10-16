@@ -26,8 +26,6 @@ Open work only. A finished item is deleted.
   checked on 2026-10-16; the Ifrit headshot immunity was missing.
 - Barbarian Madman `racial_trait` 'Regeneration' is hand-written; BB's
   trickster_god_racial.nut has an empty Name. Decide the label source.
-- data.py `_coalesce` normalises NULL subfaction / racial_trait to ''. Removing
-  it needs the columns NOT NULL (schema) or a template-side default.
 - No test asserts that each calculator input moves the result; deploy.sh does
   not clear the cache although the page says it does. Both proposed
   2026-10-16, no GO yet.

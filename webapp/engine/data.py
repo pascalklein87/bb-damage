@@ -33,14 +33,6 @@ def _query(sql, params=None):
     return rows
 
 
-def _coalesce(v, default):
-    """Producer-side normalisation: a NULL DB value becomes the canonical
-    'absent' value. Used only where NULL is a real product state (an
-    unfactioned weapon, an enemy with no racial trait), never to mask a
-    missing required field."""
-    return default if v is None else v
-
-
 def _slug(name):
     """Weapon / skill URL slug. Deterministic from the display name; the
     skill form matches the SKILL_CALC_PARAMS keys in routes.py (e.g.
@@ -177,7 +169,11 @@ def load_weapons():
             'shield_damage': r['shield_damage'],
             'headshot_chance': r['headshot_chance_bonus'],
             'mastery': r['mastery'],
-            'subfaction': _coalesce(r['subfaction'], ''),
+            # bb_data.item_weapon.subfaction is NULL for a weapon of no
+            # faction; the tag reads '' for it. User decision 2026-10-16:
+            # NULL means none here, not a missing field. Not a guard, not a
+            # todo.
+            'subfaction': '' if r['subfaction'] is None else r['subfaction'],
             'slug': r['unique_slug'],
             'fatigue_per_use': r['fatigue_per_use'],
             'skills': skills_by_weapon.get(r['id'], []),
@@ -203,7 +199,10 @@ def load_enemies():
             # BB IsImmuneToHeadshots (sand_golem.nut:307): no headshot bonus
             # and no Pound head piercing (actor.nut:1489, pound.nut:153).
             'is_headshot_immune': bool(r['is_headshot_immune']),
-            'racial_trait': _coalesce(r['racial_trait'], ''),
+            # enemy.racial_trait is NULL for an enemy with no racial trait;
+            # the stat card reads '' for it. User decision 2026-10-16: NULL
+            # means none here, not a missing field. Not a guard, not a todo.
+            'racial_trait': '' if r['racial_trait'] is None else r['racial_trait'],
             'armor_damage_received_perc': r['armor_damage_received_perc'],
             # Percent of max hitpoints healed before each attack (Barbarian
             # Madman 6, trickster_god_racial.nut:25). Unholds carry 0 although
