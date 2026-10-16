@@ -13,3 +13,5 @@ Open work only. A finished item is deleted.
   match. The calculator and bng-game both roll head injuries from the
   smaller pools. Producer fix: a pool junction table in bb_data (schema
   change, needs approval).
+- `enemy_armor_loadout` has no `id` primary key (root README: PK is always
+  `id`; every SELECT includes it). Schema change, needs approval.

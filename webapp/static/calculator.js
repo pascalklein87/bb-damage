@@ -574,7 +574,7 @@ $(function() {
             }
         }
 
-        // Always send weapon stats from inputs — catches unsaved edits
+        // Always send weapon stats from inputs - catches unsaved edits
         var $sel = $('#weapon-select option:selected');
         var defMin = $sel.data('min'), defMax = $sel.data('max');
         var defAp = Math.round(parseFloat($sel.data('ap')) * 100);
@@ -607,7 +607,8 @@ $(function() {
             warnings.push('Double Grip only works with 1-handed weapons.');
         if (isTwoHanded && $('#perk-duelist').is(':checked'))
             warnings.push('Duelist only works with 1-handed weapons.');
-        var skillName = $('#skill-select option:selected').text().trim();
+        var selectedSkill = getSelectedSkill();
+        var skillName = selectedSkill === null ? '' : selectedSkill.name;
         if (skillName === 'Puncture' && $('#trait-double-grip').is(':checked'))
             warnings.push('Double Grip does not apply to Puncture.');
         if (skillName === 'Puncture') {

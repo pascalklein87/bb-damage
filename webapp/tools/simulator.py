@@ -46,6 +46,13 @@ ASSAULT_STRIKE_PIERCING_ADD = 0.2
 # A hit injures only from this much hitpoint damage (character.nut:71).
 INJURY_MIN_DAMAGE = 10
 
+# Defender perks bb-damage-engine applies by name (attack.py execute_attack):
+# Battle Forged scales armor damage by current total armor, Steel Brow cancels
+# the headshot bonus, Indomitable halves all damage received
+# (indomitable_effect.nut:56). Nimble arrives as the precomputed
+# Defender.nimble_perc; Nine Lives and Resilient are simulator rules below.
+ENGINE_DEFENDER_PERKS = ('Battle Forged', 'Steel Brow', 'Indomitable')
+
 
 def _sub_hit_count(strategy, sub_hits, injuries):
     """Sub-hits of one use. 'repeat' (Perforate) adds one thrust per injury
@@ -116,7 +123,7 @@ def _sample_loadout(table):
 
 def simulate_hits_to_kill(attacker, defender, num_simulations,
                           headshot_chance, *,
-                          executioner, crippling_strikes, head_hunter,
+                          crippling_strikes, head_hunter,
                           scales_with_missing_hp, calc_params,
                           enemy_perks, armor_loadouts, injury_immune,
                           skill_resistance, heal_per_turn,
@@ -131,13 +138,13 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
     Caller-side rules (bleed, injury, resolve, fearsome, Nine Lives)
     are handled here, not by the engine.
 
-    All keyword args are required — caller (routes.py) always emits a
+    All keyword args are required - caller (routes.py) always emits a
     complete record. Per parent README NO GUARD RULE we don't accept
     None and coalesce; missing data is a producer bug.
     """
 
     # routes.py:expand_calculator_skills builds calc_params from
-    # DEFAULT_CALC_PARAMS + per-skill overrides — every key below is
+    # DEFAULT_CALC_PARAMS + per-skill overrides - every key below is
     # always present, so we read with direct access (NO GUARD RULE).
     strategy = calc_params['strategy']
     base_sub_hits = calc_params['sub_hits']
@@ -160,21 +167,13 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
 
     is_melee_attack = attacker['is_melee_attack']
 
-    has_battle_forged = 'Battle Forged' in enemy_perks
-    has_steel_brow = 'Steel Brow' in enemy_perks
     has_nine_lives = 'Nine Lives' in enemy_perks
     has_nimble = 'Nimble' in enemy_perks
     has_resilient = 'Resilient' in enemy_perks
 
-    # Engine-handled defender perks. Nimble's mult is precomputed by
-    # the wiki (per-enemy hardcoded) and passed to the engine via its
-    # named Defender.nimble_perc input (2026-07-02 engine API; the old
-    # armor_fatigue field + 'Nimble' perk-name branch are gone).
-    defender_perks_engine = []
-    if has_battle_forged:
-        defender_perks_engine.append('Battle Forged')
-    if has_steel_brow:
-        defender_perks_engine.append('Steel Brow')
+    # Defender perks the engine applies by name (ENGINE_DEFENDER_PERKS);
+    # Nimble goes in as the precomputed Defender.nimble_perc below.
+    defender_perks_engine = [p for p in ENGINE_DEFENDER_PERKS if p in enemy_perks]
 
     # Attacker-side injury threshold multiplier (BB hitInfo.InjuryThresholdMult,
     # skill.nut:1798): Gash x0.66 / x0.5 (gash_skill.nut:113-117), Crippling
@@ -291,10 +290,12 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                     damage_regular_received_perc=1.0,
                     skill_resistance_perc=skill_resistance,
                     is_injured=len(injuries_present) > 0,
-                    # The wiki simulator does not model these — passed
-                    # explicitly at their no-effect values (the engine has
-                    # NO DEFAULTS; every Defender field is required).
-                    damage_armor_received_perc=1.0,
+                    # BB DamageReceivedArmorMult (Fallen Betrayer 0.75,
+                    # zombie_betrayer.nut:25); 1.0 for every other defender.
+                    damage_armor_received_perc=defender['damage_armor_received_perc'],
+                    # The simulator does not model these - passed explicitly
+                    # at their no-effect values (the engine has NO DEFAULTS;
+                    # every Defender field is required).
                     damage_total_received_perc=1.0,
                     damage_piercing_received_perc=1.0,
                     regular_damage_reduction=0,
@@ -363,7 +364,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                         if first_injury_hit == 0:
                             first_injury_hit = hits
 
-                # Nine Lives — single block covering both per-sub-hit
+                # Nine Lives - single block covering both per-sub-hit
                 # (triple/single) and atomic-on-summed-total (split_man,
                 # gated to fire only on the last iteration).
                 if ((strategy != 'split_man' or i == sub_count - 1)
@@ -374,7 +375,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                     nine_lives_used = True
 
                 # Triple/single: stop if defender truly dead. Split Man
-                # does NOT break — secondary fires regardless of primary.
+                # does NOT break - secondary fires regardless of primary.
                 if strategy != 'split_man' and current_hp <= 0:
                     break
 
@@ -398,7 +399,7 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                     and max_single_hit_hp >= 6):
                 bleed_stacks.append(1 if has_resilient else 2)
 
-            # Resolve / Fearsome — fire on the first attack where any
+            # Resolve / Fearsome - fire on the first attack where any
             # sub-hit's hp_removed crosses the threshold (BB checks per
             # onDamageReceived, so any sub-hit qualifies).
             if first_resolve_hit == 0 and max_single_hit_hp >= 15:
@@ -504,10 +505,10 @@ def simulate_hits_to_kill(attacker, defender, num_simulations,
                 nimble_perc=nimble_mult_passthrough,
                 damage_regular_received_perc=1.0,
                 skill_resistance_perc=skill_resistance,
-                # Not modelled by the deterministic peak — explicit
+                damage_armor_received_perc=defender['damage_armor_received_perc'],
+                # Not modelled by the deterministic peak - explicit
                 # no-effect values (engine has NO DEFAULTS).
                 is_injured=False,
-                damage_armor_received_perc=1.0,
                 damage_total_received_perc=1.0,
                 damage_piercing_received_perc=1.0,
                 regular_damage_reduction=0,

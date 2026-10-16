@@ -40,6 +40,24 @@ MODIFIERS = {
     'strange-mushrooms': {'checkbox': 'status-strange-mushrooms','name': 'Strange Mushrooms'},
 }
 
+# Custom Brother defensive perks: URL slug (calculator.js cb_perks) -> BB perk
+# name. Battle Forged / Steel Brow / Indomitable are applied by the engine
+# (simulator.py ENGINE_DEFENDER_PERKS), Nine Lives / Resilient by the
+# simulator, Nimble via its precomputed multiplier (cb_fat).
+CUSTOM_BROTHER_PERKS = {
+    'bf':     'Battle Forged',
+    'nimble': 'Nimble',
+    'sb':     'Steel Brow',
+    'nl':     'Nine Lives',
+    'res':    'Resilient',
+    'indom':  'Indomitable',
+}
+
+# The five editable weapon stats (Named weapons). calculator.js sends all five
+# together whenever any differs from the weapon's base. ap / dap / hs are
+# integer percents; hs is the headshot-chance BONUS on top of the 25 base.
+EDITED_WEAPON_STAT_PARAMS = ('dmin', 'dmax', 'ap', 'dap', 'hs')
+
 
 # ---------------------------------------------------------------------------
 # Calculator-specific simulation parameters, keyed by skill slug.
@@ -251,6 +269,11 @@ def damage_calculator():
     skill_slug = request.args.get('skill')
     mods_str = request.args.get('mods', '')
     active_mods = mods_str.split('_') if mods_str else []
+    unknown_mods = [m for m in active_mods if m not in MODIFIERS]
+    if unknown_mods:
+        return _calc_input_error(
+            f"unknown modifier(s) {', '.join(unknown_mods)}. Known: "
+            f"{', '.join(MODIFIERS)}.")
     buff_slug = request.args.get('buff', '')
     champion = request.args.get('champion', '') == '1'
     # Checkbox state of the conditional sub-hit skill (Assault); read on
@@ -282,17 +305,12 @@ def damage_calculator():
         # (bb_damage_engine.nimble_multiplier; BB perk_nimble.nut:69-70). No copied formula.
         cb_nimble_mult = nimble_multiplier(cb_armor_fatigue)
 
-        cb_perk_names = []
-        if 'bf' in cb_perks:
-            cb_perk_names.append('Battle Forged')
-        if 'nimble' in cb_perks:
-            cb_perk_names.append('Nimble')
-        if 'sb' in cb_perks:
-            cb_perk_names.append('Steel Brow')
-        if 'nl' in cb_perks:
-            cb_perk_names.append('Nine Lives')
-        if 'res' in cb_perks:
-            cb_perk_names.append('Resilient')
+        unknown_perks = [p for p in cb_perks if p not in CUSTOM_BROTHER_PERKS]
+        if unknown_perks:
+            return _calc_input_error(
+                f"unknown custom brother perk(s) {', '.join(unknown_perks)}. "
+                f"Known: {', '.join(CUSTOM_BROTHER_PERKS)}.")
+        cb_perk_names = [CUSTOM_BROTHER_PERKS[p] for p in cb_perks]
 
         sel_enemy = {
             'id': 'custom',
@@ -314,7 +332,6 @@ def damage_calculator():
             'heal_per_turn': 0,
             'perks': cb_perk_names,
             '_nimble_mult': cb_nimble_mult,
-            '_indomitable': 'indom' in cb_perks,
         }
     else:
         sel_enemy = next((e for e in ENEMIES
@@ -328,8 +345,7 @@ def damage_calculator():
         'enemy_id': sel_enemy['id'] if sel_enemy else None,
         'skill_slug': skill_slug,
         'mods': active_mods,
-        'mod_checkboxes': {MODIFIERS[s]['checkbox'] for s in active_mods
-                           if s in MODIFIERS},
+        'mod_checkboxes': {MODIFIERS[s]['checkbox'] for s in active_mods},
         'buff_slug': buff_slug,
         'champion': champion,
         'is_custom_brother': is_custom_brother,
@@ -345,7 +361,7 @@ def damage_calculator():
     enemy = sel_enemy
 
     # Resolve skill. When the URL specifies a skill slug it MUST exist
-    # on the weapon — silent fallback used to mask malformed URLs (the
+    # on the weapon - silent fallback used to mask malformed URLs (the
     # wiki landed on weapon['skills'][0] instead of erroring). When no
     # slug is provided, default to the weapon's first listed skill.
     if not weapon['skills']:
@@ -365,17 +381,26 @@ def damage_calculator():
     else:
         skill = weapon['skills'][0]
 
-    # Base weapon stats (overridable by edited params)
-    has_edited_stats = request.args.get('dmin') is not None
+    # Base weapon stats, or the five edited ones. A URL carrying some but not
+    # all five is malformed (calculator.js always sends them together).
+    edited_stats = {k: request.args[k] for k in EDITED_WEAPON_STAT_PARAMS
+                    if k in request.args}
+    has_edited_stats = bool(edited_stats)
+    if has_edited_stats and len(edited_stats) < len(EDITED_WEAPON_STAT_PARAMS):
+        return _calc_input_error(
+            "edited weapon stats need all of dmin, dmax, ap, dap and hs.")
     try:
-        damage_min = int(request.args.get('dmin', weapon['damage_min']))
-        damage_max = int(request.args.get('dmax', weapon['damage_max']))
-        ap = float(request.args.get('ap', weapon['piercing_perc'] * 100)) / 100
-        dap = float(request.args.get('dap', weapon['damage_armor_perc'] * 100)) / 100
-        hs_param = request.args.get('hs')
-        if hs_param is not None:
-            headshot_chance = (25 + float(hs_param)) / 100
+        if has_edited_stats:
+            damage_min = int(edited_stats['dmin'])
+            damage_max = int(edited_stats['dmax'])
+            ap = float(edited_stats['ap']) / 100
+            dap = float(edited_stats['dap']) / 100
+            headshot_chance = (25 + float(edited_stats['hs'])) / 100
         else:
+            damage_min = weapon['damage_min']
+            damage_max = weapon['damage_max']
+            ap = weapon['piercing_perc']
+            dap = weapon['damage_armor_perc']
             headshot_chance = (25 + weapon['headshot_chance']) / 100.0
     except ValueError:
         return _calc_input_error(
@@ -385,12 +410,10 @@ def damage_calculator():
     # Apply skill stats. expand_calculator_skills + _skill_dict
     # guarantee every field below is present on every skill dict, so
     # we read with direct access (no .get fallback). piercing_perc is
-    # None for non-attack skills (Riposte / Spearwall) per
-    # data.py:load_skills — that's a real product state, not a guard.
+    # 0.0 for non-attack skills (Riposte / Spearwall), data.py:_skill_dict.
     damage_min += skill['bonus_damage']
     damage_max += skill['bonus_damage']
-    if skill['piercing_perc'] is not None:
-        ap = min(1.0, ap + skill['piercing_perc'])
+    ap = min(1.0, ap + skill['piercing_perc'])
     skill_damage_mult        = skill['damage_mult']
     scales_with_missing_hp   = skill['scales_with_missing_hp']
     hitpoint_damage_minimum  = skill['hitpoint_damage_minimum']
@@ -418,11 +441,8 @@ def damage_calculator():
             continue
         if skill_name == 'Puncture' and mod == 'double-grip':
             continue
-        info = MODIFIERS.get(mod)
-        if info:
-            modifier_names.append(info['name'])
+        modifier_names.append(MODIFIERS[mod]['name'])
 
-    executioner = 'executioner' in active_mods
     crippling_strikes = 'crippling-strikes' in active_mods
     head_hunter = 'head-hunter' in active_mods
 
@@ -431,7 +451,6 @@ def damage_calculator():
         'damage_max': damage_max,
         'damage_armor_perc': dap,
         'piercing_perc': ap,
-        'damage_regular_perc': 1.0,
         # skill-only base; modifier names compose into damage_perc inside
         # the engine via build_attacker.
         'damage_total_perc': skill_damage_mult,
@@ -509,7 +528,7 @@ def damage_calculator():
 
     # Nimble mult: only consulted when defender has Nimble. Custom
     # brother sets _nimble_mult during construction; vanilla enemies
-    # are looked up in NIMBLE_MULT — missing entry for a Nimble enemy
+    # are looked up in NIMBLE_MULT - missing entry for a Nimble enemy
     # is a producer bug (raises via dict access).
     if 'Nimble' in enemy['perks']:
         if is_custom_brother:
@@ -519,23 +538,14 @@ def damage_calculator():
     else:
         nimble_mult_val = 1.0   # unused (engine only applies on Nimble)
 
-    # Indomitable: halves all incoming damage. Only the custom brother
-    # path can set this flag.
-    total_received = 1.0
-    if is_custom_brother and enemy.get('_indomitable'):
-        total_received = 0.5
-
     defender = {
         'armor': enemy['body_armor_max'],
         'head_armor': enemy['head_armor_max'],
         'hitpoints': enemy['hitpoints'],
         'nimble_mult': nimble_mult_val,
-        'damage_regular_received_perc': 1.0,
+        # BB DamageReceivedArmorMult (Fallen Betrayer 0.75,
+        # zombie_betrayer.nut:25); 1.0 for every other enemy.
         'damage_armor_received_perc': enemy['armor_damage_received_perc'],
-        'damage_piercing_received_perc': 1.0,
-        'damage_total_received_perc': total_received,
-        'regular_damage_reduction': 0,
-        'armor_damage_reduction': 0,
     }
 
     num_simulations = 20000
@@ -547,7 +557,8 @@ def damage_calculator():
     if active_mods:
         cache_parts.append(f'mods={"_".join(sorted(active_mods))}')
     if has_edited_stats:
-        cache_parts.append(f'dmin={damage_min}&dmax={damage_max}&ap={int(ap*100)}&dap={int(dap*100)}')
+        cache_parts.append('&'.join(f'{k}={edited_stats[k]}'
+                                    for k in EDITED_WEAPON_STAT_PARAMS))
     if buff_slug:
         cache_parts.append(f'buff={buff_slug}')
     if champion:
@@ -587,7 +598,6 @@ def damage_calculator():
     else:
         hits_to_kill = simulate_hits_to_kill(
             attacker, defender, num_simulations, headshot_chance,
-            executioner=executioner,
             crippling_strikes=crippling_strikes,
             head_hunter=head_hunter,
             scales_with_missing_hp=scales_with_missing_hp,
