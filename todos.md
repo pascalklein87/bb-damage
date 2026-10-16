@@ -29,6 +29,3 @@ Open work only. A finished item is deleted.
 - No test asserts that each calculator input moves the result; deploy.sh does
   not clear the cache although the page says it does. Both proposed
   2026-10-16, no GO yet.
-- Comments attributing decisions to the user, unverified: routes.py
-  `INITIATIVE_DEFAULT` "(user decision 2026-10-11)"; engine attack.py:35 and
-  calculator.py:18 "(user rule 2026-06-15)"; engine docs/decisions.md.
