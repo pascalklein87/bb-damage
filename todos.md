@@ -29,3 +29,5 @@ Open work only. A finished item is deleted.
 - No test asserts that each calculator input moves the result; deploy.sh does
   not clear the cache although the page says it does. Both proposed
   2026-10-16, no GO yet.
+
+- Visitor session cookie: wire the shared `bng-session` Flask hook into this app (cookie `bng_session`, table `bng_web.session`, a session ends after 1 hour without a request). The full plan is bb-seeds/todos.md item 7.
